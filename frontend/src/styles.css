@@ -244,6 +244,8 @@ button {
 }
 
 .topbar {
+  position: relative;
+  z-index: 50;
   min-height: 70px;
   padding: 14px 32px;
   display: flex;
@@ -265,31 +267,167 @@ button {
   color: var(--muted);
 }
 
-.statusPills {
+.sessionActions {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
   justify-content: flex-end;
 }
 
-.pill {
-  height: 34px;
-  padding: 0 12px;
+.profileMenu {
+  position: relative;
+}
+
+.profileMenuButton {
+  min-width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
   color: #5b6f8a;
   background: #fbfdff;
 }
 
-.pill i {
+.profileMenuButton:hover,
+.profileMenuButton[aria-expanded="true"] {
+  color: var(--ink);
+  border-color: #b9d6e5;
+  background: #f2f8fb;
+}
+
+.onlineDot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  flex: 0 0 auto;
   background: var(--success);
+}
+
+.profileButtonName {
+  max-width: 150px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profilePopover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 100;
+  width: 270px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-8px) scale(0.98);
+  transform-origin: top right;
+  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms ease;
+}
+
+.profilePopover.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+.profilePopoverHeader {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.profilePopoverHeader strong,
+.profilePopoverHeader span {
+  display: block;
+}
+
+.profilePopoverHeader strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.profilePopoverHeader span {
+  margin-top: 5px;
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.profilePopoverGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  padding-top: 12px;
+}
+
+.profilePopoverGrid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.profilePopoverGrid strong {
+  margin-bottom: 8px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.welcomeShell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: #ffffff;
+  animation: welcomeScreenInOut 2600ms ease both;
+}
+
+.welcomePanel {
+  width: min(100%, 420px);
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.welcomeLogo {
+  width: 148px;
+  height: auto;
+  object-fit: contain;
+  margin-bottom: 28px;
+}
+
+.welcomePanel span,
+.welcomePanel strong {
+  display: block;
+  text-align: center;
+}
+
+.welcomePanel span {
+  color: #087d41;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.welcomePanel strong {
+  margin-top: 8px;
+  color: var(--ink);
+  font-size: 34px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
 }
 
 .logout {
@@ -305,6 +443,7 @@ button {
 
 .workspace {
   position: relative;
+  z-index: 1;
   padding: 36px;
 }
 
@@ -887,6 +1026,24 @@ tr:last-child td {
   }
 }
 
+@keyframes welcomeScreenInOut {
+  0% {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  12%,
+  82% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.995);
+  }
+}
+
 @media (max-width: 1180px) {
   .appShell {
     grid-template-columns: 250px minmax(0, 1fr);
@@ -936,6 +1093,17 @@ tr:last-child td {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .sessionActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .profilePopover {
+    left: 0;
+    right: auto;
+    width: min(270px, calc(100vw - 44px));
   }
 
   .workspace {

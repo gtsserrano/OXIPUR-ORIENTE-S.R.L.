@@ -740,7 +740,7 @@ databaseChangeLog:
                   value: admin
               - column:
                   name: password_hash
-                  value: 240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9
+                  value: ec6ccf66dba86256bd8a820ac6618d9d02966194b498a9328a742e03c023f74e
               - column:
                   name: active
                   valueBoolean: true
@@ -756,3 +756,28 @@ databaseChangeLog:
               - column:
                   name: updated_at
                   valueComputed: CURRENT_TIMESTAMP
+  - changeSet:
+      id: 019-update-admin-profile-password
+      author: codex
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 1
+            sql: SELECT COUNT(*) FROM user_profiles WHERE username = 'admin'
+      changes:
+        - update:
+            tableName: user_profiles
+            columns:
+              - column:
+                  name: password_hash
+                  value: ec6ccf66dba86256bd8a820ac6618d9d02966194b498a9328a742e03c023f74e
+              - column:
+                  name: active
+                  valueBoolean: true
+              - column:
+                  name: role_name
+                  value: ADMINISTRADOR
+              - column:
+                  name: updated_at
+                  valueComputed: CURRENT_TIMESTAMP
+            where: username = 'admin'

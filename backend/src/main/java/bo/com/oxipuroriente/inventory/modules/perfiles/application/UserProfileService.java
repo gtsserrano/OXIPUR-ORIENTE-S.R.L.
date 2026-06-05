@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import bo.com.oxipuroriente.inventory.modules.perfiles.domain.UserProfile;
 import bo.com.oxipuroriente.inventory.modules.perfiles.infrastructure.UserProfileRepository;
 import bo.com.oxipuroriente.inventory.modules.perfiles.presentation.CreateUserProfileRequest;
+import bo.com.oxipuroriente.inventory.modules.perfiles.presentation.UpdateUserProfileRequest;
 import bo.com.oxipuroriente.inventory.modules.perfiles.presentation.UserProfileResponse;
 
 @Service
@@ -68,6 +69,38 @@ public class UserProfileService {
                 .stream()
                 .map(profile -> UserProfileResponse.from(profile, now))
                 .toList();
+    }
+
+    @Transactional
+    public UserProfileResponse update(Long id, UpdateUserProfileRequest request) {
+        UserProfile profile = repository.findById(id)
+                .orElseThrow(() -> new UserProfileNotFoundException(id));
+        String fullName = request.fullName().trim();
+        String username = usernameOrDefault(request.username(), fullName);
+        if (repository.existsByNormalizedFullNameAndIdNot(fullName, id)) {
+            throw new DuplicateUserProfileException(fullName);
+        }
+        if (repository.existsByNormalizedUsernameAndIdNot(username, id)) {
+            throw new DuplicateUserProfileException(username);
+        }
+
+        profile.setFullName(fullName);
+        profile.setRoleName(request.roleName().trim());
+        profile.setUsername(username);
+        if (request.password() != null && !request.password().isBlank()) {
+            profile.setPasswordHash(hashPassword(request.password()));
+        }
+        profile.setActive(request.active() == null || request.active());
+
+        return UserProfileResponse.from(repository.save(profile), Instant.now());
+    }
+
+    @Transactional
+    public void delete(Long id) {
+        if (!repository.existsById(id)) {
+            throw new UserProfileNotFoundException(id);
+        }
+        repository.deleteById(id);
     }
 
     @Transactional

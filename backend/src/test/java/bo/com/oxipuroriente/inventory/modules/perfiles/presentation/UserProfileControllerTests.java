@@ -1,9 +1,11 @@
 package bo.com.oxipuroriente.inventory.modules.perfiles.presentation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.UUID;
@@ -66,6 +68,43 @@ class UserProfileControllerTests {
 
         assertThat(updated.get("online").asBoolean()).isTrue();
         assertThat(updated.get("lastActivityAt").asText()).isNotBlank();
+    }
+
+    @Test
+    void updatesProfile() throws Exception {
+        JsonNode created = postProfile(uniqueName("Editable"), "OPERADOR");
+        String newFullName = uniqueName("Administrador editado");
+        String newUsername = "admin-editado-" + UUID.randomUUID();
+
+        JsonNode updated = objectMapper.readTree(mockMvc.perform(put("/api/profiles/{id}", created.get("id").longValue())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName": "%s",
+                                  "roleName": "ADMINISTRADOR",
+                                  "username": "%s",
+                                  "password": ""
+                                }
+                                """.formatted(newFullName, newUsername)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+
+        assertThat(updated.get("fullName").asText()).isEqualTo(newFullName);
+        assertThat(updated.get("username").asText()).isEqualTo(newUsername);
+        assertThat(updated.get("roleName").asText()).isEqualTo("ADMINISTRADOR");
+    }
+
+    @Test
+    void deletesProfile() throws Exception {
+        JsonNode created = postProfile(uniqueName("Eliminar"), "OPERADOR");
+
+        mockMvc.perform(delete("/api/profiles/{id}", created.get("id").longValue()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(patch("/api/profiles/{id}/activity", created.get("id").longValue()))
+                .andExpect(status().isNotFound());
     }
 
     @Test

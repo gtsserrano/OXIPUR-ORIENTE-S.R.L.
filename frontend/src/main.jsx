@@ -66,7 +66,7 @@ const emptyForm = {
     ownerType: "COMPANY"
   },
   product: { id: null, code: "", name: "", description: "" },
-  profile: { fullName: "", username: "", password: "", roleName: "OPERADOR" },
+  profile: { id: null, fullName: "", username: "", password: "", roleName: "OPERADOR", active: true },
   sale: {
     id: null,
     noteNumber: "",
@@ -82,6 +82,7 @@ const emptyForm = {
 function App() {
   const [active, setActive] = useState("dashboard");
   const [session, setSession] = useState(readStoredSession);
+  const [welcomeVisible, setWelcomeVisible] = useState(false);
   const [loginForm, setLoginForm] = useState(emptyLoginForm);
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
@@ -143,6 +144,12 @@ function App() {
       loadAll();
     }
   }, [session]);
+
+  useEffect(() => {
+    if (!welcomeVisible) return undefined;
+    const timeout = window.setTimeout(() => setWelcomeVisible(false), 2600);
+    return () => window.clearTimeout(timeout);
+  }, [welcomeVisible]);
 
   const metrics = useMemo(() => {
     const inPlant = state.inventory.filter((item) => item.currentLocationType === MAIN_WAREHOUSE).length;
@@ -232,18 +239,24 @@ function App() {
     event.preventDefault();
     const form = forms.profile;
     await runAction(async () => {
-      await api("/api/profiles", {
-        method: "POST",
+      const savedProfile = await api(form.id ? `/api/profiles/${form.id}` : "/api/profiles", {
+        method: form.id ? "PUT" : "POST",
         body: {
           fullName: form.fullName,
           username: form.username,
           password: form.password,
-          roleName: form.roleName
+          roleName: form.roleName,
+          active: form.active !== false
         }
       });
+      if (form.id && session?.profile?.id === savedProfile.id) {
+        const nextSession = { ...session, profile: savedProfile };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
+        setSession(nextSession);
+      }
       setForms((value) => ({ ...value, profile: { ...emptyForm.profile } }));
       await loadProfiles();
-      notify("Perfil creado correctamente.");
+      notify(form.id ? "Perfil actualizado correctamente." : "Perfil creado correctamente.");
     });
   }
 
@@ -258,6 +271,7 @@ function App() {
       });
       localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
       setSession(nextSession);
+      setWelcomeVisible(true);
       setLoginForm(emptyLoginForm);
     } catch (error) {
       setLoginError(error.message);
@@ -269,6 +283,7 @@ function App() {
   function logout() {
     localStorage.removeItem(SESSION_KEY);
     setSession(null);
+    setWelcomeVisible(false);
     setActive("dashboard");
     setState((value) => ({ ...value, loading: true, message: "" }));
   }
@@ -386,6 +401,23 @@ function App() {
     });
   }
 
+  async function deleteProfile(profile) {
+    if (session?.profile?.id === profile.id) {
+      notify("No puedes eliminar el perfil de la sesión actual.");
+      return;
+    }
+    if (!window.confirm(`¿Eliminar perfil ${profile.fullName}?`)) return;
+    await runAction(async () => {
+      await api(`/api/profiles/${profile.id}`, { method: "DELETE" });
+      setForms((value) => ({
+        ...value,
+        profile: value.profile.id === profile.id ? { ...emptyForm.profile } : value.profile
+      }));
+      await loadProfiles();
+      notify("Perfil eliminado correctamente.");
+    });
+  }
+
   async function cancelSale(note) {
     if (!window.confirm("Esta nota generó movimientos de inventario. Al anularla se registrarán movimientos inversos.")) return;
     await runAction(async () => {
@@ -410,6 +442,20 @@ function App() {
         owner: cylinder.owner,
         price: cylinder.price ?? "",
         ownerType: cylinder.ownerType
+      }
+    }));
+  }
+
+  function editProfile(profile) {
+    setForms((value) => ({
+      ...value,
+      profile: {
+        id: profile.id,
+        fullName: profile.fullName,
+        username: profile.username || "",
+        password: "",
+        roleName: profile.roleName || "OPERADOR",
+        active: profile.active !== false
       }
     }));
   }
@@ -457,6 +503,10 @@ function App() {
         error={loginError}
       />
     );
+  }
+
+  if (welcomeVisible) {
+    return <WelcomeScreen name={session?.profile?.fullName || session?.profile?.username || "usuario"} />;
   }
 
   const page = {
@@ -510,7 +560,7 @@ function App() {
     ),
     cylinders: <CylindersView forms={forms} setForms={setForms} createCylinder={createCylinder} cylinders={state.cylinders} editCylinder={editCylinder} deleteCylinder={deleteCylinder} />,
     products: <ProductsView forms={forms} setForms={setForms} createProduct={createProduct} products={state.products} editProduct={editProduct} deleteProduct={deleteProduct} />,
-    profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} profiles={state.profiles} loadProfiles={loadProfiles} markProfileActivity={markProfileActivity} />,
+    profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} profiles={state.profiles} loadProfiles={loadProfiles} markProfileActivity={markProfileActivity} editProfile={editProfile} deleteProfile={deleteProfile} />,
     profile: <ProfileView />
   }[active];
 
@@ -561,19 +611,62 @@ function Sidebar({ active, setActive }) {
 }
 
 function Topbar({ title, session, onLogout }) {
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profile = session?.profile;
+  const displayName = profile?.fullName || profile?.username || "Perfil";
+
   return (
     <header className="topbar">
       <div>
         <h1>{title}</h1>
         <p>Sistema de gestión de inventario</p>
       </div>
-      <div className="statusPills">
-        <span className="pill"><i /> {session?.profile?.roleName || "IAM"}</span>
-        <span className="pill"><i /> {session?.profile?.fullName || "Perfil"}</span>
-        <span className="pill"><i /> {BRAND_NAME}</span>
+      <div className="sessionActions">
+        <div className="profileMenu">
+          <button
+            className="profileMenuButton"
+            type="button"
+            onClick={() => setProfileOpen((value) => !value)}
+            aria-expanded={profileOpen}
+            aria-label="Ver informacion del perfil"
+            title="Perfil"
+          >
+            <span className="onlineDot" />
+            <UserRound size={18} />
+            <span className="profileButtonName">{displayName}</span>
+          </button>
+          <div className={`profilePopover ${profileOpen ? "open" : ""}`} aria-hidden={!profileOpen}>
+            <div className="profilePopoverHeader">
+              <strong>{profile?.fullName || "Perfil"}</strong>
+              <span>{profile?.online ? "En linea" : "Fuera de linea"}</span>
+            </div>
+            <div className="profilePopoverGrid">
+              <span>Rol</span>
+              <strong>{profile?.roleName || "IAM"}</strong>
+              <span>Usuario</span>
+              <strong>{profile?.username || "-"}</strong>
+              <span>Empresa</span>
+              <strong>{BRAND_NAME}</strong>
+              <span>Ultima actividad</span>
+              <strong>{formatDateTime(profile?.lastActivityAt)}</strong>
+            </div>
+          </div>
+        </div>
         <button className="logout" type="button" onClick={onLogout}>Salir</button>
       </div>
     </header>
+  );
+}
+
+function WelcomeScreen({ name }) {
+  return (
+    <main className="welcomeShell" role="status" aria-live="polite">
+      <section className="welcomePanel">
+        <img className="welcomeLogo" src="/oxipur-logo.png" alt={BRAND_NAME} />
+        <span>Bienvenido,</span>
+        <strong>{name}</strong>
+      </section>
+    </main>
   );
 }
 
@@ -1103,12 +1196,12 @@ function ProductsView({ forms, setForms, createProduct, products, editProduct, d
   );
 }
 
-function ProfilesView({ forms, setForms, createProfile, profiles, loadProfiles, markProfileActivity }) {
+function ProfilesView({ forms, setForms, createProfile, profiles, loadProfiles, markProfileActivity, editProfile, deleteProfile }) {
   const form = forms.profile;
   return (
     <>
       <PageIntro eyebrow="ADMIN" title="Perfiles" subtitle="Administración de perfiles y actividad reciente." />
-      <Card title="Nuevo perfil">
+      <Card title={form.id ? "Editar perfil" : "Nuevo perfil"}>
         <form onSubmit={createProfile}>
           <div className="formGrid five">
             <Field label="Nombre">
@@ -1118,7 +1211,7 @@ function ProfilesView({ forms, setForms, createProfile, profiles, loadProfiles, 
               <input required value={form.username} onChange={(event) => setNested(setForms, "profile", "username", event.target.value)} placeholder="usuario" />
             </Field>
             <Field label="Contraseña">
-              <input required type="password" value={form.password} onChange={(event) => setNested(setForms, "profile", "password", event.target.value)} placeholder="Temporal" />
+              <input required={!form.id} type="password" value={form.password} onChange={(event) => setNested(setForms, "profile", "password", event.target.value)} placeholder={form.id ? "Mantener actual" : "Temporal"} />
             </Field>
             <Field label="Rol">
               <select required value={form.roleName} onChange={(event) => setNested(setForms, "profile", "roleName", event.target.value)}>
@@ -1127,9 +1220,14 @@ function ProfilesView({ forms, setForms, createProfile, profiles, loadProfiles, 
               </select>
             </Field>
             <div className="buttonField">
-              <button className="primaryBtn">Crear perfil</button>
+              <button className="primaryBtn">{form.id ? "Guardar cambios" : "Crear perfil"}</button>
             </div>
           </div>
+          {form.id && (
+            <div className="actionBar">
+              <button type="button" className="secondaryBtn" onClick={() => setForms((value) => ({ ...value, profile: { ...emptyForm.profile } }))}>Cancelar edición</button>
+            </div>
+          )}
         </form>
       </Card>
       <Card title="Actividad de perfiles">
@@ -1146,6 +1244,8 @@ function ProfilesView({ forms, setForms, createProfile, profiles, loadProfiles, 
             profile.online ? <span className="onlineBadge">EN LINEA</span> : <span className="offlineBadge">FUERA DE LINEA</span>,
             <div className="rowActions">
               <IconButton title="Registrar actividad" onClick={() => markProfileActivity(profile)} icon={Activity} />
+              <IconButton title="Editar perfil" onClick={() => editProfile(profile)} icon={Edit3} />
+              <IconButton title="Eliminar perfil" onClick={() => deleteProfile(profile)} icon={Trash2} />
             </div>
           ])}
           empty="Sin perfiles registrados"
