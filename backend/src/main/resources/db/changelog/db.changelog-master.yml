@@ -1,0 +1,758 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-cylinders
+      author: codex
+      changes:
+        - createTable:
+            tableName: cylinders
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: serial_number
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: capacity_m3
+                  type: DECIMAL(10,2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: owner
+                  type: VARCHAR(120)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: price
+                  type: DECIMAL(12,2)
+              - column:
+                  name: active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: 002-add-cylinder-status
+      author: codex
+      changes:
+        - addColumn:
+            tableName: cylinders
+            columns:
+              - column:
+                  name: status
+                  type: VARCHAR(40)
+                  defaultValue: AVAILABLE
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: 003-add-cylinder-owner-type
+      author: codex
+      changes:
+        - addColumn:
+            tableName: cylinders
+            columns:
+              - column:
+                  name: owner_type
+                  type: VARCHAR(40)
+                  defaultValue: COMPANY
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: 004-create-products
+      author: codex
+      changes:
+        - createTable:
+            tableName: products
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: code
+                  type: VARCHAR(60)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: name
+                  type: VARCHAR(120)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: VARCHAR(255)
+              - column:
+                  name: active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: 005-create-warehouses
+      author: codex
+      changes:
+        - createTable:
+            tableName: warehouses
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: code
+                  type: VARCHAR(60)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: name
+                  type: VARCHAR(120)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: address
+                  type: VARCHAR(255)
+              - column:
+                  name: active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: 006-add-cylinder-current-location
+      author: codex
+      changes:
+        - addColumn:
+            tableName: cylinders
+            columns:
+              - column:
+                  name: current_location_type
+                  type: VARCHAR(40)
+              - column:
+                  name: current_warehouse_id
+                  type: BIGINT
+              - column:
+                  name: current_customer_name
+                  type: VARCHAR(160)
+              - column:
+                  name: location_date
+                  type: DATE
+              - column:
+                  name: location_observation
+                  type: VARCHAR(255)
+        - addForeignKeyConstraint:
+            baseTableName: cylinders
+            baseColumnNames: current_warehouse_id
+            referencedTableName: warehouses
+            referencedColumnNames: id
+            constraintName: fk_cylinders_current_warehouse
+  - changeSet:
+      id: 007-seed-main-warehouse
+      author: codex
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM warehouses WHERE code = 'PLANTA'
+      changes:
+        - insert:
+            tableName: warehouses
+            columns:
+              - column:
+                  name: code
+                  value: PLANTA
+              - column:
+                  name: name
+                  value: Planta
+              - column:
+                  name: active
+                  valueBoolean: true
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  valueComputed: CURRENT_TIMESTAMP
+  - changeSet:
+      id: 008-create-sales-notes
+      author: codex
+      changes:
+        - createTable:
+            tableName: sales_notes
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: note_number
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: customer_name
+                  type: VARCHAR(160)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: note_date
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: observations
+                  type: VARCHAR(255)
+              - column:
+                  name: status
+                  type: VARCHAR(40)
+                  defaultValue: REGISTERED
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source_type
+                  type: VARCHAR(40)
+                  defaultValue: USER
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: sales_notes
+            indexName: idx_sales_notes_note_number
+            columns:
+              - column:
+                  name: note_number
+        - createIndex:
+            tableName: sales_notes
+            indexName: idx_sales_notes_customer_name
+            columns:
+              - column:
+                  name: customer_name
+        - createIndex:
+            tableName: sales_notes
+            indexName: idx_sales_notes_note_date
+            columns:
+              - column:
+                  name: note_date
+  - changeSet:
+      id: 009-create-sales-note-lines
+      author: codex
+      changes:
+        - createTable:
+            tableName: sales_note_delivered_cylinders
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: sales_note_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: cylinder_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: product_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: origin_warehouse_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: observations
+                  type: VARCHAR(255)
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createTable:
+            tableName: sales_note_collected_cylinders
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: sales_note_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: cylinder_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: destination_warehouse_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: observations
+                  type: VARCHAR(255)
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: sales_note_delivered_cylinders
+            baseColumnNames: sales_note_id
+            referencedTableName: sales_notes
+            referencedColumnNames: id
+            constraintName: fk_sales_note_delivered_note
+        - addForeignKeyConstraint:
+            baseTableName: sales_note_delivered_cylinders
+            baseColumnNames: cylinder_id
+            referencedTableName: cylinders
+            referencedColumnNames: id
+            constraintName: fk_sales_note_delivered_cylinder
+        - addForeignKeyConstraint:
+            baseTableName: sales_note_delivered_cylinders
+            baseColumnNames: product_id
+            referencedTableName: products
+            referencedColumnNames: id
+            constraintName: fk_sales_note_delivered_product
+        - addForeignKeyConstraint:
+            baseTableName: sales_note_delivered_cylinders
+            baseColumnNames: origin_warehouse_id
+            referencedTableName: warehouses
+            referencedColumnNames: id
+            constraintName: fk_sales_note_delivered_origin_warehouse
+        - addForeignKeyConstraint:
+            baseTableName: sales_note_collected_cylinders
+            baseColumnNames: sales_note_id
+            referencedTableName: sales_notes
+            referencedColumnNames: id
+            constraintName: fk_sales_note_collected_note
+        - addForeignKeyConstraint:
+            baseTableName: sales_note_collected_cylinders
+            baseColumnNames: cylinder_id
+            referencedTableName: cylinders
+            referencedColumnNames: id
+            constraintName: fk_sales_note_collected_cylinder
+        - addForeignKeyConstraint:
+            baseTableName: sales_note_collected_cylinders
+            baseColumnNames: destination_warehouse_id
+            referencedTableName: warehouses
+            referencedColumnNames: id
+            constraintName: fk_sales_note_collected_destination_warehouse
+  - changeSet:
+      id: 010-create-inventory-movements
+      author: codex
+      changes:
+        - createTable:
+            tableName: inventory_movements
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: sales_note_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: cylinder_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: product_id
+                  type: BIGINT
+              - column:
+                  name: movement_type
+                  type: VARCHAR(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: origin_warehouse_id
+                  type: BIGINT
+              - column:
+                  name: destination_warehouse_id
+                  type: BIGINT
+              - column:
+                  name: origin_location_type
+                  type: VARCHAR(40)
+              - column:
+                  name: destination_location_type
+                  type: VARCHAR(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: origin_customer_name
+                  type: VARCHAR(160)
+              - column:
+                  name: destination_customer_name
+                  type: VARCHAR(160)
+              - column:
+                  name: movement_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: notes
+                  type: VARCHAR(255)
+              - column:
+                  name: source_type
+                  type: VARCHAR(40)
+                  defaultValue: USER
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: inventory_movements
+            baseColumnNames: sales_note_id
+            referencedTableName: sales_notes
+            referencedColumnNames: id
+            constraintName: fk_inventory_movements_sales_note
+        - addForeignKeyConstraint:
+            baseTableName: inventory_movements
+            baseColumnNames: cylinder_id
+            referencedTableName: cylinders
+            referencedColumnNames: id
+            constraintName: fk_inventory_movements_cylinder
+        - addForeignKeyConstraint:
+            baseTableName: inventory_movements
+            baseColumnNames: product_id
+            referencedTableName: products
+            referencedColumnNames: id
+            constraintName: fk_inventory_movements_product
+        - addForeignKeyConstraint:
+            baseTableName: inventory_movements
+            baseColumnNames: origin_warehouse_id
+            referencedTableName: warehouses
+            referencedColumnNames: id
+            constraintName: fk_inventory_movements_origin_warehouse
+        - addForeignKeyConstraint:
+            baseTableName: inventory_movements
+            baseColumnNames: destination_warehouse_id
+            referencedTableName: warehouses
+            referencedColumnNames: id
+            constraintName: fk_inventory_movements_destination_warehouse
+        - createIndex:
+            tableName: inventory_movements
+            indexName: idx_inventory_movements_sales_note
+            columns:
+              - column:
+                  name: sales_note_id
+        - createIndex:
+            tableName: inventory_movements
+            indexName: idx_inventory_movements_cylinder
+            columns:
+              - column:
+                  name: cylinder_id
+  - changeSet:
+      id: 011-add-collected-cylinder-origin-customer
+      author: codex
+      changes:
+        - addColumn:
+            tableName: sales_note_collected_cylinders
+            columns:
+              - column:
+                  name: origin_customer_name
+                  type: VARCHAR(160)
+  - changeSet:
+      id: 012-add-sales-note-line-capacity-snapshot
+      author: codex
+      changes:
+        - addColumn:
+            tableName: sales_note_delivered_cylinders
+            columns:
+              - column:
+                  name: capacity_m3
+                  type: DECIMAL(10,2)
+        - addColumn:
+            tableName: sales_note_collected_cylinders
+            columns:
+              - column:
+                  name: capacity_m3
+                  type: DECIMAL(10,2)
+        - sql:
+            sql: UPDATE sales_note_delivered_cylinders d SET capacity_m3 = (SELECT c.capacity_m3 FROM cylinders c WHERE c.id = d.cylinder_id) WHERE capacity_m3 IS NULL
+        - sql:
+            sql: UPDATE sales_note_collected_cylinders c SET capacity_m3 = (SELECT cy.capacity_m3 FROM cylinders cy WHERE cy.id = c.cylinder_id) WHERE capacity_m3 IS NULL
+        - addNotNullConstraint:
+            tableName: sales_note_delivered_cylinders
+            columnName: capacity_m3
+            columnDataType: DECIMAL(10,2)
+        - addNotNullConstraint:
+            tableName: sales_note_collected_cylinders
+            columnName: capacity_m3
+            columnDataType: DECIMAL(10,2)
+  - changeSet:
+      id: 013-add-sales-note-utility-amount
+      author: codex
+      changes:
+        - addColumn:
+            tableName: sales_notes
+            columns:
+              - column:
+                  name: utility_amount
+                  type: DECIMAL(12,2)
+                  defaultValueNumeric: 0.00
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: sales_notes
+            indexName: idx_sales_notes_status
+            columns:
+              - column:
+                  name: status
+        - createIndex:
+            tableName: inventory_movements
+            indexName: idx_inventory_movements_movement_date
+            columns:
+              - column:
+                  name: movement_date
+  - changeSet:
+      id: 014-create-user-profiles
+      author: codex
+      changes:
+        - createTable:
+            tableName: user_profiles
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: full_name
+                  type: VARCHAR(160)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: role_name
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_activity_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: online_until
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: user_profiles
+            indexName: idx_user_profiles_full_name
+            columns:
+              - column:
+                  name: full_name
+        - createIndex:
+            tableName: user_profiles
+            indexName: idx_user_profiles_online_until
+            columns:
+              - column:
+                  name: online_until
+  - changeSet:
+      id: 015-add-sales-note-line-owner-snapshot
+      author: codex
+      changes:
+        - addColumn:
+            tableName: sales_note_delivered_cylinders
+            columns:
+              - column:
+                  name: owner_name
+                  type: VARCHAR(160)
+        - addColumn:
+            tableName: sales_note_collected_cylinders
+            columns:
+              - column:
+                  name: owner_name
+                  type: VARCHAR(160)
+        - sql:
+            sql: UPDATE sales_note_delivered_cylinders d SET owner_name = (SELECT c.owner FROM cylinders c WHERE c.id = d.cylinder_id) WHERE owner_name IS NULL
+        - sql:
+            sql: UPDATE sales_note_collected_cylinders c SET owner_name = (SELECT cy.owner FROM cylinders cy WHERE cy.id = c.cylinder_id) WHERE owner_name IS NULL
+        - addNotNullConstraint:
+            tableName: sales_note_delivered_cylinders
+            columnName: owner_name
+            columnDataType: VARCHAR(160)
+        - addNotNullConstraint:
+            tableName: sales_note_collected_cylinders
+            columnName: owner_name
+            columnDataType: VARCHAR(160)
+  - changeSet:
+      id: 016-add-collected-cylinder-product
+      author: codex
+      changes:
+        - addColumn:
+            tableName: sales_note_collected_cylinders
+            columns:
+              - column:
+                  name: product_id
+                  type: BIGINT
+        - addForeignKeyConstraint:
+            baseTableName: sales_note_collected_cylinders
+            baseColumnNames: product_id
+            referencedTableName: products
+            referencedColumnNames: id
+            constraintName: fk_sales_note_collected_product
+  - changeSet:
+      id: 017-add-user-profile-iam-fields
+      author: codex
+      changes:
+        - addColumn:
+            tableName: user_profiles
+            columns:
+              - column:
+                  name: username
+                  type: VARCHAR(80)
+              - column:
+                  name: password_hash
+                  type: VARCHAR(64)
+        - createIndex:
+            tableName: user_profiles
+            indexName: idx_user_profiles_username
+            columns:
+              - column:
+                  name: username
+        - addUniqueConstraint:
+            tableName: user_profiles
+            columnNames: username
+            constraintName: uq_user_profiles_username
+  - changeSet:
+      id: 018-seed-admin-profile
+      author: codex
+      preConditions:
+        - onFail: MARK_RAN
+        - sqlCheck:
+            expectedResult: 0
+            sql: SELECT COUNT(*) FROM user_profiles WHERE username = 'admin'
+      changes:
+        - insert:
+            tableName: user_profiles
+            columns:
+              - column:
+                  name: full_name
+                  value: Administrador
+              - column:
+                  name: role_name
+                  value: ADMINISTRADOR
+              - column:
+                  name: username
+                  value: admin
+              - column:
+                  name: password_hash
+                  value: 240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9
+              - column:
+                  name: active
+                  valueBoolean: true
+              - column:
+                  name: last_activity_at
+                  valueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: online_until
+                  valueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  valueComputed: CURRENT_TIMESTAMP
