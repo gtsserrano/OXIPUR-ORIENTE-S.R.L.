@@ -55,4 +55,9 @@ public class UserProfileController {
     public UserProfileResponse markActivity(@PathVariable Long id) {
         return service.markActivity(id);
     }
+
+    @PatchMapping("/{id}/offline")
+    public UserProfileResponse markOffline(@PathVariable Long id) {
+        return service.markOffline(id);
+    }
 }

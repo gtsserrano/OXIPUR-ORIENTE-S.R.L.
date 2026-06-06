@@ -172,6 +172,16 @@ button {
   font-size: 16px;
 }
 
+.sidebarLogo {
+  width: 74px;
+  height: 54px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #ffffff;
+  padding: 6px;
+}
+
 .brand strong {
   display: block;
   font-size: 16px;
@@ -540,6 +550,10 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.formGrid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .formGrid.four {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -606,6 +620,62 @@ button {
 
 .actionBar {
   margin-top: 12px;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 49, 61, 0.34);
+  backdrop-filter: blur(4px);
+  animation: modalOverlayIn 180ms ease both;
+}
+
+.modalOverlay.closing {
+  animation: modalOverlayOut 180ms ease both;
+}
+
+.profileEditModal {
+  width: min(100%, 680px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(8, 49, 61, 0.2);
+  animation: modalPanelIn 180ms ease both;
+}
+
+.modalOverlay.closing .profileEditModal {
+  animation: modalPanelOut 180ms ease both;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 18px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modalHeader span {
+  color: #007ca0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.modalHeader h3 {
+  margin: 6px 0 0;
+  color: var(--ink);
+  font-size: 22px;
+}
+
+.modalActions {
+  justify-content: flex-end;
 }
 
 .lineSection {
@@ -839,6 +909,67 @@ button {
   margin-bottom: 14px;
 }
 
+.compactPrintBtn {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.printingToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 18px;
+  background: #f8fcff;
+}
+
+.printingToolbar span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.printingToolbar strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink);
+}
+
+.printSelect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+}
+
+.printSelect input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.printSelect span {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #9fb9c8;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 4px #ffffff;
+}
+
+.printSelect input:checked + span {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
 .dualForm {
   display: grid;
   grid-template-columns: 1.1fr 1.1fr 1fr 1.1fr 1.2fr 1.2fr;
@@ -1044,6 +1175,50 @@ tr:last-child td {
   }
 }
 
+@keyframes modalOverlayIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalOverlayOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes modalPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modalPanelOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+}
+
 @media (max-width: 1180px) {
   .appShell {
     grid-template-columns: 250px minmax(0, 1fr);
@@ -1095,6 +1270,11 @@ tr:last-child td {
     flex-direction: column;
   }
 
+  .printingToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .sessionActions {
     width: 100%;
     justify-content: flex-start;
@@ -1115,6 +1295,7 @@ tr:last-child td {
   }
 
   .metricGrid,
+  .formGrid.two,
   .formGrid.three,
   .formGrid.four,
   .formGrid.five,

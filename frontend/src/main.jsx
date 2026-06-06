@@ -10,8 +10,10 @@ import {
   Eye,
   Gauge,
   LayoutDashboard,
+  Banknote,
   Package,
   Plus,
+  Printer,
   RefreshCw,
   Search,
   Trash2,
@@ -25,12 +27,16 @@ import "./styles.css";
 const BRAND_NAME = "OXIPUR ORIENTE S.R.L.";
 const MAIN_WAREHOUSE = "PLANTA";
 const SESSION_KEY = "oxipur_iam_session";
+const PRESENCE_HEARTBEAT_MS = 30000;
+const PROFILE_REFRESH_MS = 30000;
+const PROFILE_EDITOR_CLOSE_MS = 180;
 
 const navItems = [
   { id: "dashboard", label: "Centro operativo", icon: LayoutDashboard },
   { id: "inventory", label: "Inventario", icon: Boxes },
   { id: "sales", label: "Notas de venta", icon: ClipboardList },
-  { id: "utilities", label: "Utilidades", icon: Activity },
+  { id: "printing", label: "Impresión", icon: Printer },
+  { id: "utilities", label: "Utilidades", icon: Banknote },
   { id: "cylinders", label: "Cilindros", icon: Gauge },
   { id: "products", label: "Productos", icon: Package },
   { id: "profiles", label: "Perfiles", icon: Users },
@@ -67,6 +73,7 @@ const emptyForm = {
   },
   product: { id: null, code: "", name: "", description: "" },
   profile: { id: null, fullName: "", username: "", password: "", roleName: "OPERADOR", active: true },
+  profileEditor: { id: null, fullName: "", username: "", password: "", roleName: "OPERADOR", active: true },
   sale: {
     id: null,
     noteNumber: "",
@@ -104,9 +111,11 @@ function App() {
   const [filters, setFilters] = useState({ locationType: "", customerName: "", serialNumber: "" });
   const [customerQuery, setCustomerQuery] = useState("");
   const [forms, setForms] = useState(emptyForm);
+  const [profileEditorClosing, setProfileEditorClosing] = useState(false);
   const [salesDateFilter, setSalesDateFilter] = useState(createDateFilter());
   const [movementDateFilter, setMovementDateFilter] = useState(createDateFilter());
   const [utilityDateFilter, setUtilityDateFilter] = useState(createDateFilter());
+  const [selectedPrintNoteId, setSelectedPrintNoteId] = useState("");
 
   async function loadAll() {
     setState((value) => ({ ...value, loading: true }));
@@ -143,7 +152,68 @@ function App() {
     if (session) {
       loadAll();
     }
-  }, [session]);
+  }, [session?.accessToken]);
+
+  useEffect(() => {
+    if (!session?.profile?.id) return undefined;
+    let cancelled = false;
+
+    async function markCurrentProfileActive(refreshProfiles = false) {
+      try {
+        const updated = await api(`/api/profiles/${session.profile.id}/activity`, { method: "PATCH" });
+        if (cancelled) return;
+        setSession((current) => {
+          if (!current || current.profile?.id !== updated.id) return current;
+          const nextSession = { ...current, profile: updated };
+          localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
+          return nextSession;
+        });
+        setState((value) => ({
+          ...value,
+          profiles: value.profiles.map((profile) => (profile.id === updated.id ? updated : profile))
+        }));
+        if (refreshProfiles) {
+          const profiles = await api("/api/profiles");
+          if (!cancelled) {
+            setState((value) => ({ ...value, profiles }));
+          }
+        }
+      } catch {
+        // Presence is best-effort; ordinary work should not be interrupted by a missed heartbeat.
+      }
+    }
+
+    async function refreshProfilePresence() {
+      try {
+        const profiles = await api("/api/profiles");
+        if (!cancelled) {
+          setState((value) => ({ ...value, profiles }));
+        }
+      } catch {
+        // The next heartbeat or manual page refresh will recover the activity list.
+      }
+    }
+
+    markCurrentProfileActive(true);
+    const heartbeat = window.setInterval(() => markCurrentProfileActive(false), PRESENCE_HEARTBEAT_MS);
+    const profileRefresh = window.setInterval(refreshProfilePresence, PROFILE_REFRESH_MS);
+    const handleFocus = () => markCurrentProfileActive(true);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        markCurrentProfileActive(true);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      cancelled = true;
+      window.clearInterval(heartbeat);
+      window.clearInterval(profileRefresh);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [session?.profile?.id]);
 
   useEffect(() => {
     if (!welcomeVisible) return undefined;
@@ -239,8 +309,8 @@ function App() {
     event.preventDefault();
     const form = forms.profile;
     await runAction(async () => {
-      const savedProfile = await api(form.id ? `/api/profiles/${form.id}` : "/api/profiles", {
-        method: form.id ? "PUT" : "POST",
+      await api("/api/profiles", {
+        method: "POST",
         body: {
           fullName: form.fullName,
           username: form.username,
@@ -249,14 +319,34 @@ function App() {
           active: form.active !== false
         }
       });
-      if (form.id && session?.profile?.id === savedProfile.id) {
+      setForms((value) => ({ ...value, profile: { ...emptyForm.profile } }));
+      await loadProfiles();
+      notify("Perfil creado correctamente.");
+    });
+  }
+
+  async function updateProfile(event) {
+    event.preventDefault();
+    const form = forms.profileEditor;
+    await runAction(async () => {
+      const savedProfile = await api(`/api/profiles/${form.id}`, {
+        method: "PUT",
+        body: {
+          fullName: form.fullName,
+          username: form.username,
+          password: form.password,
+          roleName: form.roleName,
+          active: form.active !== false
+        }
+      });
+      if (session?.profile?.id === savedProfile.id) {
         const nextSession = { ...session, profile: savedProfile };
         localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
         setSession(nextSession);
       }
-      setForms((value) => ({ ...value, profile: { ...emptyForm.profile } }));
       await loadProfiles();
-      notify(form.id ? "Perfil actualizado correctamente." : "Perfil creado correctamente.");
+      notify("Perfil actualizado correctamente.");
+      closeProfileEditor();
     });
   }
 
@@ -281,6 +371,9 @@ function App() {
   }
 
   function logout() {
+    if (session?.profile?.id) {
+      api(`/api/profiles/${session.profile.id}/offline`, { method: "PATCH" }).catch(() => {});
+    }
     localStorage.removeItem(SESSION_KEY);
     setSession(null);
     setWelcomeVisible(false);
@@ -291,17 +384,6 @@ function App() {
   async function loadProfiles() {
     const profiles = await api("/api/profiles");
     setState((value) => ({ ...value, profiles }));
-  }
-
-  async function markProfileActivity(profile) {
-    await runAction(async () => {
-      const updated = await api(`/api/profiles/${profile.id}/activity`, { method: "PATCH" });
-      setState((value) => ({
-        ...value,
-        profiles: value.profiles.map((item) => (item.id === updated.id ? updated : item))
-      }));
-      notify("Actividad registrada.");
-    });
   }
 
   async function createSale(event) {
@@ -411,7 +493,7 @@ function App() {
       await api(`/api/profiles/${profile.id}`, { method: "DELETE" });
       setForms((value) => ({
         ...value,
-        profile: value.profile.id === profile.id ? { ...emptyForm.profile } : value.profile
+        profileEditor: value.profileEditor.id === profile.id ? { ...emptyForm.profileEditor } : value.profileEditor
       }));
       await loadProfiles();
       notify("Perfil eliminado correctamente.");
@@ -447,9 +529,10 @@ function App() {
   }
 
   function editProfile(profile) {
+    setProfileEditorClosing(false);
     setForms((value) => ({
       ...value,
-      profile: {
+      profileEditor: {
         id: profile.id,
         fullName: profile.fullName,
         username: profile.username || "",
@@ -458,6 +541,15 @@ function App() {
         active: profile.active !== false
       }
     }));
+  }
+
+  function closeProfileEditor() {
+    if (!forms.profileEditor.id || profileEditorClosing) return;
+    setProfileEditorClosing(true);
+    window.setTimeout(() => {
+      setForms((value) => ({ ...value, profileEditor: { ...emptyForm.profileEditor } }));
+      setProfileEditorClosing(false);
+    }, PROFILE_EDITOR_CLOSE_MS);
   }
 
   function editSale(note) {
@@ -560,7 +652,8 @@ function App() {
     ),
     cylinders: <CylindersView forms={forms} setForms={setForms} createCylinder={createCylinder} cylinders={state.cylinders} editCylinder={editCylinder} deleteCylinder={deleteCylinder} />,
     products: <ProductsView forms={forms} setForms={setForms} createProduct={createProduct} products={state.products} editProduct={editProduct} deleteProduct={deleteProduct} />,
-    profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} profiles={state.profiles} loadProfiles={loadProfiles} markProfileActivity={markProfileActivity} editProfile={editProfile} deleteProfile={deleteProfile} />,
+    profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} updateProfile={updateProfile} profiles={state.profiles} loadProfiles={loadProfiles} editProfile={editProfile} closeProfileEditor={closeProfileEditor} profileEditorClosing={profileEditorClosing} deleteProfile={deleteProfile} />,
+    printing: <PrintingView salesNotes={state.salesNotes} selectedPrintNoteId={selectedPrintNoteId} setSelectedPrintNoteId={setSelectedPrintNoteId} printSaleNote={printSaleNote} />,
     profile: <ProfileView />
   }[active];
 
@@ -584,7 +677,7 @@ function Sidebar({ active, setActive }) {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brandMark">O</div>
+        <img className="sidebarLogo" src="/oxipur-sidebar-logo.png" alt={BRAND_NAME} />
         <div>
           <strong>{BRAND_NAME}</strong>
           <span>Inventario operativo</span>
@@ -990,6 +1083,52 @@ function UtilitiesView({ summary, loading, error, dateFilter, setDateFilter, loa
   );
 }
 
+function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId, printSaleNote }) {
+  const selectedNote = salesNotes.find((note) => String(note.id) === String(selectedPrintNoteId));
+  return (
+    <>
+      <PageIntro eyebrow="IMPRESIÓN" title="Impresión" subtitle="Selecciona una nota de venta registrada para imprimirla." />
+      <Card title="Notas disponibles">
+        <div className="printingToolbar">
+          <div>
+            <span>Nota seleccionada</span>
+            <strong>{selectedNote ? `${selectedNote.noteNumber} - ${selectedNote.customerName}` : "Ninguna"}</strong>
+          </div>
+          <button
+            type="button"
+            className="primaryBtn iconTextBtn"
+            onClick={() => selectedNote && printSaleNote(selectedNote)}
+            disabled={!selectedNote}
+          >
+            <Printer size={16} /> Imprimir nota
+          </button>
+        </div>
+        <DataTable
+          columns={["Seleccionar", "Número", "Cliente", "Fecha", "Estado", "Entregados", "Recogidos"]}
+          rows={salesNotes.map((note) => [
+            <label className="printSelect">
+              <input
+                type="radio"
+                name="print-note"
+                checked={String(selectedPrintNoteId) === String(note.id)}
+                onChange={() => setSelectedPrintNoteId(String(note.id))}
+              />
+              <span />
+            </label>,
+            note.noteNumber,
+            note.customerName,
+            formatDateTime(note.noteDate),
+            note.status === "CANCELLED" ? <span className="dangerBadge">ANULADA</span> : "REGISTERED",
+            formatLineSummary(note.deliveredCylinders),
+            formatLineSummary(note.collectedCylinders)
+          ])}
+          empty="Sin notas registradas para imprimir"
+        />
+      </Card>
+    </>
+  );
+}
+
 function SalePreview({ form, cylinders, products }) {
   const delivered = previewDeliveredLines(form.deliveredCylinders, cylinders, products);
   const collected = previewCollectedLines(form.collectedCylinders, cylinders, products);
@@ -1196,12 +1335,13 @@ function ProductsView({ forms, setForms, createProduct, products, editProduct, d
   );
 }
 
-function ProfilesView({ forms, setForms, createProfile, profiles, loadProfiles, markProfileActivity, editProfile, deleteProfile }) {
+function ProfilesView({ forms, setForms, createProfile, updateProfile, profiles, loadProfiles, editProfile, closeProfileEditor, profileEditorClosing, deleteProfile }) {
   const form = forms.profile;
+  const editor = forms.profileEditor;
   return (
     <>
       <PageIntro eyebrow="ADMIN" title="Perfiles" subtitle="Administración de perfiles y actividad reciente." />
-      <Card title={form.id ? "Editar perfil" : "Nuevo perfil"}>
+      <Card title="Nuevo perfil">
         <form onSubmit={createProfile}>
           <div className="formGrid five">
             <Field label="Nombre">
@@ -1211,7 +1351,7 @@ function ProfilesView({ forms, setForms, createProfile, profiles, loadProfiles, 
               <input required value={form.username} onChange={(event) => setNested(setForms, "profile", "username", event.target.value)} placeholder="usuario" />
             </Field>
             <Field label="Contraseña">
-              <input required={!form.id} type="password" value={form.password} onChange={(event) => setNested(setForms, "profile", "password", event.target.value)} placeholder={form.id ? "Mantener actual" : "Temporal"} />
+              <input required type="password" value={form.password} onChange={(event) => setNested(setForms, "profile", "password", event.target.value)} placeholder="Temporal" />
             </Field>
             <Field label="Rol">
               <select required value={form.roleName} onChange={(event) => setNested(setForms, "profile", "roleName", event.target.value)}>
@@ -1220,14 +1360,9 @@ function ProfilesView({ forms, setForms, createProfile, profiles, loadProfiles, 
               </select>
             </Field>
             <div className="buttonField">
-              <button className="primaryBtn">{form.id ? "Guardar cambios" : "Crear perfil"}</button>
+              <button className="primaryBtn">Crear perfil</button>
             </div>
           </div>
-          {form.id && (
-            <div className="actionBar">
-              <button type="button" className="secondaryBtn" onClick={() => setForms((value) => ({ ...value, profile: { ...emptyForm.profile } }))}>Cancelar edición</button>
-            </div>
-          )}
         </form>
       </Card>
       <Card title="Actividad de perfiles">
@@ -1243,7 +1378,6 @@ function ProfilesView({ forms, setForms, createProfile, profiles, loadProfiles, 
             formatDateTime(profile.lastActivityAt),
             profile.online ? <span className="onlineBadge">EN LINEA</span> : <span className="offlineBadge">FUERA DE LINEA</span>,
             <div className="rowActions">
-              <IconButton title="Registrar actividad" onClick={() => markProfileActivity(profile)} icon={Activity} />
               <IconButton title="Editar perfil" onClick={() => editProfile(profile)} icon={Edit3} />
               <IconButton title="Eliminar perfil" onClick={() => deleteProfile(profile)} icon={Trash2} />
             </div>
@@ -1251,6 +1385,42 @@ function ProfilesView({ forms, setForms, createProfile, profiles, loadProfiles, 
           empty="Sin perfiles registrados"
         />
       </Card>
+      {editor.id && (
+        <div className={`modalOverlay ${profileEditorClosing ? "closing" : "open"}`} onMouseDown={closeProfileEditor}>
+          <section className="profileEditModal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modalHeader">
+              <div>
+                <span>PERFIL</span>
+                <h3>Editar perfil</h3>
+              </div>
+              <IconButton title="Cerrar" onClick={closeProfileEditor} icon={X} />
+            </div>
+            <form onSubmit={updateProfile}>
+              <div className="formGrid two">
+                <Field label="Nombre">
+                  <input required value={editor.fullName} onChange={(event) => setNested(setForms, "profileEditor", "fullName", event.target.value)} placeholder="Nombre completo" />
+                </Field>
+                <Field label="Usuario">
+                  <input required value={editor.username} onChange={(event) => setNested(setForms, "profileEditor", "username", event.target.value)} placeholder="usuario" />
+                </Field>
+                <Field label="Contraseña">
+                  <input type="password" value={editor.password} onChange={(event) => setNested(setForms, "profileEditor", "password", event.target.value)} placeholder="Mantener actual" />
+                </Field>
+                <Field label="Rol">
+                  <select required value={editor.roleName} onChange={(event) => setNested(setForms, "profileEditor", "roleName", event.target.value)}>
+                    <option value="ADMINISTRADOR">Administrador</option>
+                    <option value="OPERADOR">Operador</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="actionBar modalActions">
+                <button className="primaryBtn">Guardar cambios</button>
+                <button type="button" className="secondaryBtn" onClick={closeProfileEditor}>Cancelar</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </>
   );
 }
@@ -1541,6 +1711,278 @@ function showSaleDetail(note) {
   const collected = formatLineSummary(note.collectedCylinders);
   const movements = (note.movements || []).map((movement) => movement.movementType).join(", ") || "Sin movimientos";
   window.alert(`Nota ${note.noteNumber}\nEstado: ${note.status}\nCliente: ${note.customerName}\nUtilidad: ${money(note.utilityAmount)}\n\nCilindros entregados: ${delivered}\nCilindros recogidos: ${collected}\n\nMovimientos: ${movements}`);
+}
+
+function printSaleNote(note) {
+  const printWindow = window.open("", "_blank", "width=900,height=1100");
+  if (!printWindow) {
+    window.alert("El navegador bloqueó la ventana de impresión. Habilita ventanas emergentes para este sitio.");
+    return;
+  }
+
+  const delivered = note.deliveredCylinders || [];
+  const collected = note.collectedCylinders || [];
+  const totalDeliveredCapacity = sumNoteCapacity(delivered);
+  const totalCollectedCapacity = sumNoteCapacity(collected);
+  const logoUrl = `${window.location.origin}/oxipur-sidebar-logo.png`;
+  const statusText = note.status === "CANCELLED" ? "ANULADA" : "REGISTRADA";
+
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Nota de entrega ${escapeHtml(note.noteNumber || "")}</title>
+    <style>
+      @page { size: letter; margin: 12mm; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: #111827;
+        font-family: Arial, Helvetica, sans-serif;
+        background: #f3f6f8;
+      }
+      .sheet {
+        width: 190mm;
+        min-height: 250mm;
+        margin: 0 auto;
+        padding: 12mm;
+        background: #ffffff;
+        border: 1px solid #cfdbe5;
+      }
+      .header {
+        display: grid;
+        grid-template-columns: 48mm 1fr 42mm;
+        gap: 8mm;
+        align-items: center;
+        border-bottom: 2px solid #0b6d8e;
+        padding-bottom: 7mm;
+      }
+      .logo {
+        width: 42mm;
+        height: auto;
+      }
+      h1 {
+        margin: 0;
+        text-align: center;
+        color: #082f49;
+        font-size: 22px;
+        letter-spacing: 0;
+      }
+      .copy {
+        margin-top: 2mm;
+        text-align: center;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .noteBox {
+        border: 1px solid #94a3b8;
+        border-radius: 4px;
+        padding: 4mm;
+        text-align: center;
+      }
+      .noteBox span,
+      .field span,
+      .summaryBox span {
+        display: block;
+        color: #64748b;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .noteBox strong {
+        display: block;
+        margin-top: 2mm;
+        color: #0f172a;
+        font-size: 18px;
+      }
+      .meta {
+        display: grid;
+        grid-template-columns: 1.5fr 1fr 0.8fr;
+        gap: 4mm;
+        margin-top: 8mm;
+      }
+      .field,
+      .summaryBox {
+        min-height: 16mm;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        padding: 3mm;
+      }
+      .field strong,
+      .summaryBox strong {
+        display: block;
+        margin-top: 2mm;
+        color: #111827;
+        font-size: 13px;
+      }
+      .sectionTitle {
+        margin: 8mm 0 3mm;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: #082f49;
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 11px;
+      }
+      th,
+      td {
+        border: 1px solid #94a3b8;
+        padding: 2.2mm;
+        vertical-align: top;
+      }
+      th {
+        color: #0f172a;
+        background: #eaf4f8;
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+      td.empty {
+        height: 12mm;
+        color: #94a3b8;
+        text-align: center;
+      }
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4mm;
+        margin-top: 8mm;
+      }
+      .observations {
+        margin-top: 6mm;
+        min-height: 20mm;
+      }
+      .signatures {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16mm;
+        margin-top: 18mm;
+      }
+      .signature {
+        padding-top: 14mm;
+        border-top: 1px solid #111827;
+        text-align: center;
+        color: #334155;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .footer {
+        margin-top: 8mm;
+        border-top: 1px solid #cbd5e1;
+        padding-top: 3mm;
+        color: #64748b;
+        font-size: 10px;
+        text-align: center;
+      }
+      @media print {
+        body { background: #ffffff; }
+        .sheet { border: 0; width: auto; min-height: auto; margin: 0; padding: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="sheet">
+      <header class="header">
+        <img class="logo" src="${logoUrl}" alt="OXIPUR" />
+        <div>
+          <h1>NOTA DE ENTREGA</h1>
+          <div class="copy">OXIPUR ORIENTE S.R.L.</div>
+        </div>
+        <div class="noteBox">
+          <span>Nro. nota</span>
+          <strong>${escapeHtml(note.noteNumber || "-")}</strong>
+        </div>
+      </header>
+      <section class="meta">
+        <div class="field"><span>Cliente</span><strong>${escapeHtml(note.customerName || "-")}</strong></div>
+        <div class="field"><span>Fecha y hora</span><strong>${escapeHtml(formatDateTime(note.noteDate))}</strong></div>
+        <div class="field"><span>Estado</span><strong>${escapeHtml(statusText)}</strong></div>
+      </section>
+      ${salePrintTable("Cilindros entregados", delivered)}
+      ${salePrintTable("Cilindros recogidos", collected)}
+      <section class="summary">
+        <div class="summaryBox"><span>Total entregados</span><strong>${delivered.length}</strong></div>
+        <div class="summaryBox"><span>Total recogidos</span><strong>${collected.length}</strong></div>
+        <div class="summaryBox"><span>Capacidad total</span><strong>${formatCapacity(totalDeliveredCapacity + totalCollectedCapacity)} m3</strong></div>
+      </section>
+      <div class="field observations"><span>Observaciones</span><strong>${escapeHtml(note.observations || "-")}</strong></div>
+      <section class="signatures">
+        <div class="signature">Entregado por</div>
+        <div class="signature">Recibido por</div>
+      </section>
+      <footer class="footer">Documento generado desde el sistema de gestión de inventario OXIPUR ORIENTE S.R.L.</footer>
+    </main>
+    <script>
+      window.addEventListener("load", () => {
+        window.setTimeout(() => {
+          window.print();
+        }, 350);
+      });
+    </script>
+  </body>
+</html>`);
+  printWindow.document.close();
+}
+
+function salePrintTable(title, lines) {
+  return `<section>
+    <div class="sectionTitle">
+      <span>${escapeHtml(title)}</span>
+      <span>${lines.length} registro(s)</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 10mm;">Nro.</th>
+          <th style="width: 28mm;">Cilindro</th>
+          <th>Producto</th>
+          <th style="width: 24mm;">Capacidad</th>
+          <th>Propiedad</th>
+          <th>Observacion</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${lines.length ? lines.map((line, index) => salePrintRow(line, index)).join("") : `<tr><td class="empty" colspan="6">Sin registros</td></tr>`}
+      </tbody>
+    </table>
+  </section>`;
+}
+
+function salePrintRow(line, index) {
+  return `<tr>
+    <td>${index + 1}</td>
+    <td>${escapeHtml(line.serialNumber || line.cylinderId || "-")}</td>
+    <td>${escapeHtml(line.productName || line.productId || "-")}</td>
+    <td>${escapeHtml(formatCapacity(line.capacityM3))} m3</td>
+    <td>${escapeHtml(line.ownerName || "-")}</td>
+    <td>${escapeHtml(line.observations || "-")}</td>
+  </tr>`;
+}
+
+function sumNoteCapacity(lines) {
+  return lines.reduce((total, line) => total + Number(line.capacityM3 || 0), 0);
+}
+
+function formatCapacity(value) {
+  const number = Number(value || 0);
+  return Number.isInteger(number) ? String(number) : number.toFixed(2);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 async function api(path, options = {}) {

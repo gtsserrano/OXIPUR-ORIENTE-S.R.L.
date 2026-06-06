@@ -113,6 +113,15 @@ public class UserProfileService {
         return UserProfileResponse.from(repository.save(profile), now);
     }
 
+    @Transactional
+    public UserProfileResponse markOffline(Long id) {
+        UserProfile profile = repository.findById(id)
+                .orElseThrow(() -> new UserProfileNotFoundException(id));
+        Instant now = Instant.now();
+        profile.setOnlineUntil(now);
+        return UserProfileResponse.from(repository.save(profile), now);
+    }
+
     private String usernameOrDefault(String username, String fullName) {
         if (username != null && !username.isBlank()) {
             return username.trim();

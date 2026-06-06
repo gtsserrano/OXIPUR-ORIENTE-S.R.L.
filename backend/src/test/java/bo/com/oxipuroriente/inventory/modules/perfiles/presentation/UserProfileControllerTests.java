@@ -71,6 +71,19 @@ class UserProfileControllerTests {
     }
 
     @Test
+    void marksProfileOffline() throws Exception {
+        JsonNode created = postProfile(uniqueName("Desconectar"), "OPERADOR");
+
+        JsonNode updated = objectMapper.readTree(mockMvc.perform(patch("/api/profiles/{id}/offline", created.get("id").longValue()))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+
+        assertThat(updated.get("online").asBoolean()).isFalse();
+    }
+
+    @Test
     void updatesProfile() throws Exception {
         JsonNode created = postProfile(uniqueName("Editable"), "OPERADOR");
         String newFullName = uniqueName("Administrador editado");
