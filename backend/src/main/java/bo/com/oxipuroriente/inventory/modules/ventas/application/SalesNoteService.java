@@ -188,10 +188,6 @@ public class SalesNoteService {
         Cylinder cylinder = findActiveCylinder(line.cylinderId());
         Product product = findActiveProduct(line.productId());
 
-        if (cylinder.getCurrentLocationType() != CylinderLocationType.PLANTA) {
-            throw new SalesNoteException("Cylinder must be in PLANTA to be delivered: " + cylinder.getId());
-        }
-
         SalesNoteDeliveredCylinder deliveredLine = new SalesNoteDeliveredCylinder();
         deliveredLine.setSalesNoteId(salesNote.getId());
         deliveredLine.setCylinderId(cylinder.getId());
@@ -232,13 +228,7 @@ public class SalesNoteService {
         Cylinder cylinder = findActiveCylinder(line.cylinderId());
         Product product = line.productId() == null ? null : findActiveProduct(line.productId());
 
-        if (cylinder.getCurrentLocationType() != CylinderLocationType.CLIENTE) {
-            throw new SalesNoteException("Cylinder must be in CLIENTE to be collected: " + cylinder.getId());
-        }
         String originCustomerName = salesNote.getCustomerName().trim();
-        if (!sameCustomer(cylinder.getCurrentCustomerName(), originCustomerName)) {
-            throw new SalesNoteException("Collected cylinder customer does not match current location: " + cylinder.getId());
-        }
 
         SalesNoteCollectedCylinder collectedLine = new SalesNoteCollectedCylinder();
         collectedLine.setSalesNoteId(salesNote.getId());

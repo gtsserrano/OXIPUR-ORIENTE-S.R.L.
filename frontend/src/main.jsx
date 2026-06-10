@@ -6,6 +6,7 @@ import {
   ArrowUpFromLine,
   Boxes,
   ClipboardList,
+  ContactRound,
   Edit3,
   Eye,
   Gauge,
@@ -15,7 +16,6 @@ import {
   Plus,
   Printer,
   RefreshCw,
-  Search,
   Trash2,
   UserRound,
   Users,
@@ -27,13 +27,18 @@ import "./styles.css";
 const BRAND_NAME = "OXIPUR ORIENTE S.R.L.";
 const MAIN_WAREHOUSE = "PLANTA";
 const SESSION_KEY = "oxipur_iam_session";
+const LAST_ACTIVITY_KEY = "oxipur_last_activity";
+const AUTH_EXPIRED_EVENT = "oxipur_auth_expired";
+const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
 const PRESENCE_HEARTBEAT_MS = 30000;
 const PROFILE_REFRESH_MS = 30000;
 const PROFILE_EDITOR_CLOSE_MS = 180;
+const DETAIL_MODAL_CLOSE_MS = 180;
 
 const navItems = [
   { id: "dashboard", label: "Centro operativo", icon: LayoutDashboard },
   { id: "inventory", label: "Inventario", icon: Boxes },
+  { id: "clients", label: "Clientes", icon: ContactRound },
   { id: "sales", label: "Notas de venta", icon: ClipboardList },
   { id: "printing", label: "Impresión", icon: Printer },
   { id: "utilities", label: "Utilidades", icon: Banknote },
@@ -101,7 +106,6 @@ function App() {
     movements: [],
     salesNotes: [],
     operationalAlerts: null,
-    customerSummary: null,
     utilitiesSummary: null,
     utilitiesLoading: false,
     utilitiesError: "",
@@ -109,7 +113,6 @@ function App() {
     message: ""
   });
   const [filters, setFilters] = useState({ locationType: "", customerName: "", serialNumber: "" });
-  const [customerQuery, setCustomerQuery] = useState("");
   const [forms, setForms] = useState(emptyForm);
   const [profileEditorClosing, setProfileEditorClosing] = useState(false);
   const [salesDateFilter, setSalesDateFilter] = useState(createDateFilter());
@@ -152,6 +155,62 @@ function App() {
     if (session) {
       loadAll();
     }
+  }, [session?.accessToken]);
+
+  useEffect(() => {
+    function handleAuthExpired() {
+      localStorage.removeItem(LAST_ACTIVITY_KEY);
+      setSession(null);
+      setWelcomeVisible(false);
+      setActive("dashboard");
+      setState((value) => ({ ...value, loading: false, message: "" }));
+    }
+
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+  }, []);
+
+  useEffect(() => {
+    if (!session) return undefined;
+    let timeoutId;
+
+    function expireSessionByInactivity() {
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(LAST_ACTIVITY_KEY);
+      setSession(null);
+      setWelcomeVisible(false);
+      setActive("dashboard");
+      setLoginForm(emptyLoginForm);
+      setLoginError("Sesión finalizada por inactividad. Ingresa nuevamente.");
+      setState((value) => ({ ...value, loading: false, message: "" }));
+    }
+
+    function resetInactivityTimer() {
+      localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(expireSessionByInactivity, INACTIVITY_TIMEOUT_MS);
+    }
+
+    function handleButtonActivity(event) {
+      if (event.target instanceof Element && event.target.closest("button")) {
+        resetInactivityTimer();
+      }
+    }
+
+    const lastActivity = readLastActivityAt();
+    const inactiveMs = Date.now() - lastActivity;
+    if (inactiveMs >= INACTIVITY_TIMEOUT_MS) {
+      expireSessionByInactivity();
+      return undefined;
+    }
+
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(lastActivity));
+    timeoutId = window.setTimeout(expireSessionByInactivity, INACTIVITY_TIMEOUT_MS - inactiveMs);
+    window.addEventListener("click", handleButtonActivity, true);
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("click", handleButtonActivity, true);
+    };
   }, [session?.accessToken]);
 
   useEffect(() => {
@@ -239,12 +298,6 @@ function App() {
     });
     const inventory = await api(`/api/inventory/cylinders${params.toString() ? `?${params}` : ""}`);
     setState((value) => ({ ...value, inventory }));
-  }
-
-  async function searchCustomer() {
-    if (!customerQuery.trim()) return;
-    const customerSummary = await api(`/api/inventory/customers/${encodeURIComponent(customerQuery.trim())}/cylinders`);
-    setState((value) => ({ ...value, customerSummary }));
   }
 
   async function searchSalesNotes(nextFilter = salesDateFilter) {
@@ -360,6 +413,7 @@ function App() {
         body: loginForm
       });
       localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
+      localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
       setSession(nextSession);
       setWelcomeVisible(true);
       setLoginForm(emptyLoginForm);
@@ -375,6 +429,7 @@ function App() {
       api(`/api/profiles/${session.profile.id}/offline`, { method: "PATCH" }).catch(() => {});
     }
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(LAST_ACTIVITY_KEY);
     setSession(null);
     setWelcomeVisible(false);
     setActive("dashboard");
@@ -407,8 +462,20 @@ function App() {
       return;
     }
 
-    const deliveredCylinders = (form.deliveredCylinders || [])
-      .filter((line) => line.cylinderNumber && line.productId)
+    const deliveredLines = (form.deliveredCylinders || []).filter(saleLineHasAnyValue);
+    const collectedLines = (form.collectedCylinders || []).filter(saleLineHasAnyValue);
+    const missingCylinder = [...deliveredLines, ...collectedLines].some((line) => !line.cylinderNumber);
+    if (missingCylinder) {
+      notify("Completa el número de cilindro en cada línea usada.");
+      return;
+    }
+    const missingDeliveredProduct = deliveredLines.some((line) => !line.productId);
+    if (missingDeliveredProduct) {
+      notify("Selecciona el producto para cada cilindro entregado.");
+      return;
+    }
+
+    const deliveredCylinders = deliveredLines
       .map((line) => {
         const cylinder = findCylinderByNumber(state.cylinders, line.cylinderNumber);
         return {
@@ -419,13 +486,12 @@ function App() {
           observations: line.observations || null
         };
       });
-    const collectedCylinders = (form.collectedCylinders || [])
-      .filter((line) => line.cylinderNumber && line.productId)
+    const collectedCylinders = collectedLines
       .map((line) => {
         const cylinder = findCylinderByNumber(state.cylinders, line.cylinderNumber);
         return {
           cylinderId: cylinder?.id,
-          productId: Number(line.productId),
+          productId: line.productId ? Number(line.productId) : null,
           capacityM3: line.capacityM3 === "" ? cylinder?.capacityM3 ?? null : Number(line.capacityM3),
           ownerName: line.ownerName || cylinder?.owner || null,
           observations: line.observations || null
@@ -619,12 +685,9 @@ function App() {
         setFilters={setFilters}
         searchInventory={searchInventory}
         inventory={state.inventory}
-        customerQuery={customerQuery}
-        setCustomerQuery={setCustomerQuery}
-        searchCustomer={searchCustomer}
-        customerSummary={state.customerSummary}
       />
     ),
+    clients: <ClientsView initialInventory={state.inventory} />,
     sales: (
       <SalesView
         forms={forms}
@@ -835,7 +898,9 @@ function Dashboard({ metrics, inventory, movements, operationalAlerts, movementD
   );
 }
 
-function InventoryView({ filters, setFilters, searchInventory, inventory, customerQuery, setCustomerQuery, searchCustomer, customerSummary }) {
+function InventoryView({ filters, setFilters, searchInventory, inventory }) {
+  const [selectedCylinder, setSelectedCylinder] = useState(null);
+
   return (
     <>
       <PageIntro eyebrow="INVENTARIO" title="Ubicación de cilindros" subtitle="Busca cilindros por planta, cliente o número de serie." />
@@ -859,58 +924,188 @@ function InventoryView({ filters, setFilters, searchInventory, inventory, custom
           </div>
         </div>
       </Card>
-      <div className="splitGrid">
-        <Card title="Cilindros encontrados">
-          <DataTable
-            columns={["Serie", "m3", "Ubicación", "Cliente", "Última nota", "Fecha"]}
-            rows={inventory.map((item) => [
-              item.serialNumber,
-              item.capacityM3,
-              item.currentLocationType || "-",
-              item.currentCustomerName || "-",
-              item.lastDeliveryNoteNumber || "-",
-              item.lastDeliveryDate || item.locationDate || "-"
-            ])}
-            empty="Sin cilindros para los filtros seleccionados"
-          />
-        </Card>
-        <Card title="Resumen por cliente">
-          <div className="inlineSearch">
-            <Search size={18} />
-            <input value={customerQuery} onChange={(event) => setCustomerQuery(event.target.value)} placeholder="Buscar cliente exacto" />
-            <button className="secondaryBtn" onClick={searchCustomer}>Consultar</button>
-          </div>
-          {customerSummary ? (
-            <div className="customerSummary">
-              <div>
-                <span>Cliente</span>
-                <strong>{customerSummary.customerName}</strong>
-              </div>
-              <div>
-                <span>Cilindros en poder</span>
-                <strong>{customerSummary.totalCylinders}</strong>
-              </div>
-              <DataTable
-                columns={["Serie", "m3", "Entregado", "Nota"]}
-                rows={customerSummary.cylinders.map((item) => [item.serialNumber, item.capacityM3, item.deliveredAt || "-", item.salesNoteNumber || "-"])}
-                empty="Este cliente no tiene cilindros registrados"
-              />
+      <Card title="Cilindros encontrados">
+        {inventory.length ? (
+          <div className="clientListPanel">
+            <div className="clientListHeader">
+              <strong>Cilindros</strong>
+              <span>{inventory.length}</span>
             </div>
-          ) : (
-            <EmptyState title="Sin consulta" text="Ingresa un cliente para ver sus cilindros actuales." />
+            <div className="clientList">
+              {inventory.map((item) => (
+                <button
+                  type="button"
+                  key={item.cylinderId}
+                  className="clientListButton inventoryListButton"
+                  onClick={() => setSelectedCylinder(item)}
+                >
+                  <span>
+                    <strong>{item.serialNumber}</strong>
+                    <em>{inventoryCylinderSubtitle(item)}</em>
+                  </span>
+                  <b>{formatCapacity(item.capacityM3)} m3</b>
+                  <span className="clientOpenIcon" aria-hidden="true"><Eye size={16} /></span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <EmptyState title="Sin registros" text="Sin cilindros para los filtros seleccionados" />
+        )}
+      </Card>
+      {selectedCylinder && (
+        <DetailModal eyebrow="CILINDRO" title={`Cilindro ${selectedCylinder.serialNumber}`} onClose={() => setSelectedCylinder(null)}>
+          <div className="detailGrid">
+            <div><span>Serie</span><strong>{selectedCylinder.serialNumber}</strong></div>
+            <div><span>Capacidad</span><strong>{formatCapacity(selectedCylinder.capacityM3)} m3</strong></div>
+            <div><span>Ubicación actual</span><strong>{selectedCylinder.currentLocationType || "-"}</strong></div>
+            <div><span>Cliente actual</span><strong>{selectedCylinder.currentCustomerName || "-"}</strong></div>
+            <div><span>Última nota</span><strong>{selectedCylinder.lastDeliveryNoteNumber || "-"}</strong></div>
+            <div><span>Fecha</span><strong>{selectedCylinder.lastDeliveryDate || selectedCylinder.locationDate || "-"}</strong></div>
+          </div>
+          {selectedCylinder.locationObservation && (
+            <div className="detailNote">
+              <span>Observación</span>
+              <p>{selectedCylinder.locationObservation}</p>
+            </div>
           )}
-        </Card>
-      </div>
+        </DetailModal>
+      )}
+    </>
+  );
+}
+
+function ClientsView({ initialInventory = [] }) {
+  const [inventory, setInventory] = useState(initialInventory);
+  const [detailClient, setDetailClient] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function loadClientInventory() {
+    setLoading(true);
+    setError("");
+    try {
+      const nextInventory = await api("/api/inventory/cylinders?locationType=CLIENTE");
+      setInventory(nextInventory);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError("");
+      try {
+        const nextInventory = await api("/api/inventory/cylinders?locationType=CLIENTE");
+        if (!cancelled) {
+          setInventory(nextInventory);
+        }
+      } catch (requestError) {
+        if (!cancelled) {
+          setError(requestError.message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const clients = useMemo(() => buildCustomerGroups(inventory), [inventory]);
+
+  const totalCylinders = clients.reduce((total, client) => total + client.cylinders.length, 0);
+  const totalCapacity = clients.reduce((total, client) => total + client.totalCapacity, 0);
+
+  return (
+    <>
+      <PageIntro eyebrow="CLIENTES" title="Clientes con cilindros" subtitle="Consulta la posesión actual de cilindros por cliente." />
+      <Card title="Cilindros en posesión de clientes">
+        <div className="clientsToolbar">
+          <div>
+            <span>Clientes activos</span>
+            <strong>{clients.length}</strong>
+          </div>
+          <div>
+            <span>Cilindros fuera de planta</span>
+            <strong>{totalCylinders}</strong>
+          </div>
+          <div>
+            <span>Capacidad total</span>
+            <strong>{formatCapacity(totalCapacity)} m3</strong>
+          </div>
+          <button type="button" className="secondaryBtn iconTextBtn" onClick={loadClientInventory} disabled={loading}>
+            <RefreshCw size={16} /> Actualizar
+          </button>
+        </div>
+
+        {error && <div className="notice dangerNotice">{error}</div>}
+
+        {loading && !clients.length ? (
+          <Skeleton />
+        ) : clients.length ? (
+          <>
+            <div className="clientListPanel">
+              <div className="clientListHeader">
+                <strong>Clientes</strong>
+                <span>{clients.length}</span>
+              </div>
+              <div className="clientList">
+                {clients.map((client) => (
+                  <button
+                    type="button"
+                    key={client.name}
+                    className="clientListButton"
+                    onClick={() => setDetailClient(client)}
+                  >
+                    <span>
+                      <strong>{client.name}</strong>
+                      <em>{formatCapacity(client.totalCapacity)} m3</em>
+                    </span>
+                    <b>{client.cylinders.length}</b>
+                    <span className="clientOpenIcon" aria-hidden="true"><Eye size={16} /></span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {detailClient && (
+              <DetailModal eyebrow="CLIENTE" title={detailClient.name} onClose={() => setDetailClient(null)}>
+                <div className="detailGrid compact">
+                  <div><span>Cilindros en posesión</span><strong>{detailClient.cylinders.length}</strong></div>
+                  <div><span>Capacidad total</span><strong>{formatCapacity(detailClient.totalCapacity)} m3</strong></div>
+                </div>
+                <DataTable
+                  columns={["Cilindro", "Capacidad"]}
+                  rows={detailClient.cylinders.map((cylinder) => [
+                    cylinder.serialNumber,
+                    `${formatCapacity(cylinder.capacityM3)} m3`
+                  ])}
+                  empty="Este cliente no tiene cilindros en posesión."
+                />
+              </DetailModal>
+            )}
+          </>
+        ) : (
+          <EmptyState title="Sin clientes con cilindros" text="No hay cilindros ubicados actualmente en clientes." />
+        )}
+      </Card>
     </>
   );
 }
 
 function SalesView({ forms, setForms, createSale, cylinders, products, salesNotes, editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes }) {
   const form = forms.sale;
-  const plantCylinders = cylinders.filter((item) => item.currentLocationType === MAIN_WAREHOUSE);
-  const customerCylinders = cylinders.filter(
-    (item) => form.customerName.trim() && item.currentLocationType === "CLIENTE" && sameText(item.currentCustomerName, form.customerName)
-  );
+  const activeCylinders = cylinders.filter((item) => item.active !== false);
   const activeProducts = products.filter((item) => item.active !== false);
   return (
     <>
@@ -941,12 +1136,13 @@ function SalesView({ forms, setForms, createSale, cylinders, products, salesNote
               <>
                 <LineSection title="Cilindros entregados" icon={ArrowUpFromLine} lines={form.deliveredCylinders} onAdd={() => addSaleLine(setForms, "deliveredCylinders", emptyDeliveredLine)}>
                   {(line, index) => {
-                    const selected = findCylinderByNumber(plantCylinders, line.cylinderNumber);
+                    const selected = findCylinderByNumber(activeCylinders, line.cylinderNumber);
+                    const started = saleLineHasAnyValue(line);
                     return (
                       <div className="lineGrid deliveredLine" key={index}>
                         <Field label="Nro. cilindro">
-                          <input required type="number" min="1" step="1" value={line.cylinderNumber} onChange={(event) => {
-                            const selectedCylinder = findCylinderByNumber(plantCylinders, event.target.value);
+                          <input required={started} type="number" min="1" step="1" value={line.cylinderNumber} onChange={(event) => {
+                            const selectedCylinder = findCylinderByNumber(activeCylinders, event.target.value);
                             updateSaleLine(setForms, "deliveredCylinders", index, "cylinderNumber", event.target.value, {
                               capacityM3: selectedCylinder?.capacityM3 ?? "",
                               ownerName: selectedCylinder?.owner ?? line.ownerName
@@ -954,16 +1150,16 @@ function SalesView({ forms, setForms, createSale, cylinders, products, salesNote
                           }} placeholder="1001" />
                         </Field>
                         <Field label="Producto">
-                          <select value={line.productId} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "productId", event.target.value)}>
+                          <select required={started} value={line.productId} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "productId", event.target.value)}>
                             <option value="">Seleccionar</option>
                             {activeProducts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                           </select>
                         </Field>
                         <Field label="Capacidad (m3)">
-                          <input required type="number" min="0.01" step="0.01" value={line.capacityM3} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "capacityM3", event.target.value)} placeholder={selected ? String(selected.capacityM3) : "0.00"} />
+                          <input type="number" min="0.01" step="0.01" value={line.capacityM3} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "capacityM3", event.target.value)} placeholder={selected ? String(selected.capacityM3) : "0.00"} />
                         </Field>
                         <Field label="Propiedad">
-                          <input required value={line.ownerName} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "ownerName", event.target.value)} placeholder={selected?.owner || "Dueño del cilindro"} />
+                          <input value={line.ownerName} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "ownerName", event.target.value)} placeholder={selected?.owner || "Dueño del cilindro"} />
                         </Field>
                         <Field label="Observación">
                           <input value={line.observations} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "observations", event.target.value)} />
@@ -975,12 +1171,13 @@ function SalesView({ forms, setForms, createSale, cylinders, products, salesNote
                 </LineSection>
                 <LineSection title="Cilindros recogidos" icon={ArrowDownToLine} lines={form.collectedCylinders} onAdd={() => addSaleLine(setForms, "collectedCylinders", emptyCollectedLine)}>
                   {(line, index) => {
-                    const selected = findCylinderByNumber(customerCylinders, line.cylinderNumber);
+                    const selected = findCylinderByNumber(activeCylinders, line.cylinderNumber);
+                    const started = saleLineHasAnyValue(line);
                     return (
                       <div className="lineGrid collectedLine" key={index}>
                         <Field label="Nro. cilindro">
-                          <input required type="number" min="1" step="1" value={line.cylinderNumber} onChange={(event) => {
-                            const selectedCylinder = findCylinderByNumber(customerCylinders, event.target.value);
+                          <input required={started} type="number" min="1" step="1" value={line.cylinderNumber} onChange={(event) => {
+                            const selectedCylinder = findCylinderByNumber(activeCylinders, event.target.value);
                             updateSaleLine(setForms, "collectedCylinders", index, "cylinderNumber", event.target.value, {
                               capacityM3: selectedCylinder?.capacityM3 ?? "",
                               ownerName: selectedCylinder?.owner ?? line.ownerName
@@ -994,10 +1191,10 @@ function SalesView({ forms, setForms, createSale, cylinders, products, salesNote
                           </select>
                         </Field>
                         <Field label="Capacidad (m3)">
-                          <input required type="number" min="0.01" step="0.01" value={line.capacityM3} onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "capacityM3", event.target.value)} placeholder={selected ? String(selected.capacityM3) : "0.00"} />
+                          <input type="number" min="0.01" step="0.01" value={line.capacityM3} onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "capacityM3", event.target.value)} placeholder={selected ? String(selected.capacityM3) : "0.00"} />
                         </Field>
                         <Field label="Propiedad">
-                          <input required value={line.ownerName} onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "ownerName", event.target.value)} placeholder={selected?.owner || "Dueño del cilindro"} />
+                          <input value={line.ownerName} onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "ownerName", event.target.value)} placeholder={selected?.owner || "Dueño del cilindro"} />
                         </Field>
                         <Field label="Observación">
                           <input value={line.observations} onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "observations", event.target.value)} />
@@ -1489,8 +1686,7 @@ function PanelTitle({ icon: Icon, title }) {
 }
 
 function LineSection({ title, icon: Icon, lines, onAdd, children }) {
-  const visibleIndex = Math.max((lines || []).length - 1, 0);
-  const visibleLine = (lines || [])[visibleIndex];
+  const visibleLines = (lines || []).length ? lines : [{}];
 
   return (
     <div className="lineSection">
@@ -1499,7 +1695,7 @@ function LineSection({ title, icon: Icon, lines, onAdd, children }) {
         <button type="button" className="secondaryBtn iconTextBtn" onClick={onAdd}><Plus size={16} /> Agregar</button>
       </div>
       <div className="lineList">
-        {visibleLine && children(visibleLine, visibleIndex)}
+        {visibleLines.map((line, index) => children(line, index))}
       </div>
     </div>
   );
@@ -1510,6 +1706,46 @@ function IconButton({ title, onClick, icon: Icon, disabled = false }) {
     <button type="button" className="iconBtn" title={title} onClick={onClick} disabled={disabled}>
       <Icon size={16} />
     </button>
+  );
+}
+
+function DetailModal({ eyebrow, title, children, onClose }) {
+  const [closing, setClosing] = useState(false);
+
+  function requestClose() {
+    if (closing) return;
+    setClosing(true);
+    window.setTimeout(onClose, DETAIL_MODAL_CLOSE_MS);
+  }
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        requestClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  });
+
+  return (
+    <div className={closing ? "modalOverlay closing" : "modalOverlay"} onMouseDown={(event) => {
+      if (event.target === event.currentTarget) {
+        requestClose();
+      }
+    }}>
+      <section className="detailModal" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modalHeader">
+          <div>
+            <span>{eyebrow}</span>
+            <h3>{title}</h3>
+          </div>
+          <IconButton title="Cerrar" onClick={requestClose} icon={X} />
+        </div>
+        {children}
+      </section>
+    </div>
   );
 }
 
@@ -1613,6 +1849,10 @@ function updateSaleLine(setForms, field, index, key, value, extra = {}) {
   });
 }
 
+function saleLineHasAnyValue(line) {
+  return ["cylinderNumber", "productId", "capacityM3", "ownerName", "observations"].some((key) => String(line?.[key] || "").trim());
+}
+
 function createDateFilter() {
   const now = new Date();
   return {
@@ -1697,6 +1937,38 @@ function sameText(left, right) {
 
 function sumCapacity(lines) {
   return lines.reduce((total, line) => total + Number(line.capacityM3 || 0), 0);
+}
+
+function inventoryCylinderSubtitle(item) {
+  const location = item.currentLocationType || "Sin ubicación";
+  const customer = item.currentCustomerName ? `Cliente: ${item.currentCustomerName}` : "Sin cliente";
+  const note = item.lastDeliveryNoteNumber ? `Nota: ${item.lastDeliveryNoteNumber}` : "Sin nota";
+  return `${location} · ${customer} · ${note}`;
+}
+
+function buildCustomerGroups(inventory) {
+  const groups = new Map();
+  (inventory || [])
+    .filter((item) => item.currentLocationType === "CLIENTE" && String(item.currentCustomerName || "").trim())
+    .forEach((item) => {
+      const name = item.currentCustomerName.trim();
+      const key = name.toLowerCase();
+      if (!groups.has(key)) {
+        groups.set(key, { name, cylinders: [], totalCapacity: 0 });
+      }
+      const group = groups.get(key);
+      group.cylinders.push(item);
+      group.totalCapacity += Number(item.capacityM3 || 0);
+    });
+
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      cylinders: group.cylinders.sort((left, right) =>
+        String(left.serialNumber || "").localeCompare(String(right.serialNumber || ""), "es", { numeric: true })
+      )
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name, "es", { sensitivity: "base" }));
 }
 
 function formatLineSummary(lines = []) {
@@ -1998,7 +2270,14 @@ async function api(path, options = {}) {
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(readErrorMessage(text, response.status));
+    const error = new Error(readErrorMessage(text, response.status));
+    error.status = response.status;
+    if (response.status === 401 && path !== "/api/iam/login") {
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(LAST_ACTIVITY_KEY);
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    }
+    throw error;
   }
   if (response.status === 204) return null;
   return response.json();
@@ -2011,6 +2290,11 @@ function readStoredSession() {
   } catch {
     return null;
   }
+}
+
+function readLastActivityAt() {
+  const stored = Number(localStorage.getItem(LAST_ACTIVITY_KEY));
+  return Number.isFinite(stored) && stored > 0 ? stored : Date.now();
 }
 
 function readErrorMessage(text, status) {

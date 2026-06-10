@@ -208,49 +208,55 @@ class SalesNoteControllerTests {
     }
 
     @Test
-    void rejectsDeliveringCylinderAlreadyInCustomer() throws Exception {
+    void createsDeliveredLineEvenWhenCylinderIsAlreadyWithCustomer() throws Exception {
         Warehouse warehouse = mainWarehouse();
         Product product = createProduct();
         Cylinder cylinder = createCylinderInCustomer("Cliente Actual");
 
-        mockMvc.perform(post("/api/sales-notes")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "noteNumber": "%s",
-                                  "customerName": "Cliente",
-                                  "noteDate": "2026-06-02T10:30:00",
-                                  "deliveredCylinders": [
-                                    {
-                                      "cylinderId": %d,
-                                      "productId": %d
-                                    }
-                                  ]
-                                }
-                                """.formatted(next("NV-BAD-DEL"), cylinder.getId(), product.getId())))
-                .andExpect(status().isBadRequest());
+        JsonNode response = postSalesNote("""
+                {
+                  "noteNumber": "%s",
+                  "customerName": "Cliente",
+                  "noteDate": "2026-06-02T10:30:00",
+                  "deliveredCylinders": [
+                    {
+                      "cylinderId": %d,
+                      "productId": %d
+                    }
+                  ]
+                }
+                """.formatted(next("NV-FLEX-DEL"), cylinder.getId(), product.getId()));
+
+        assertThat(response.get("movements").get(0).get("movementType").asText()).isEqualTo("PLANTA_A_CLIENTE");
+        Cylinder updated = cylinderRepository.findById(cylinder.getId()).orElseThrow();
+        assertThat(updated.getCurrentLocationType()).isEqualTo(CylinderLocationType.CLIENTE);
+        assertThat(updated.getCurrentCustomerName()).isEqualTo("Cliente");
     }
 
     @Test
-    void rejectsCollectingCylinderAlreadyInPlant() throws Exception {
+    void createsCollectedLineEvenWhenCylinderIsAlreadyInPlant() throws Exception {
         Warehouse warehouse = mainWarehouse();
         Cylinder cylinder = createCylinderInPlant(warehouse.getId());
 
-        mockMvc.perform(post("/api/sales-notes")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "noteNumber": "%s",
-                                  "customerName": "Cliente",
-                                  "noteDate": "2026-06-02T10:30:00",
-                                "collectedCylinders": [
-                                  {
-                                    "cylinderId": %d
-                                  }
-                                ]
-                                }
-                                """.formatted(next("NV-BAD-COL"), cylinder.getId())))
-                .andExpect(status().isBadRequest());
+        JsonNode response = postSalesNote("""
+                {
+                  "noteNumber": "%s",
+                  "customerName": "Cliente",
+                  "noteDate": "2026-06-02T10:30:00",
+                "collectedCylinders": [
+                  {
+                    "cylinderId": %d
+                  }
+                ]
+                }
+                """.formatted(next("NV-FLEX-COL"), cylinder.getId()));
+
+        assertThat(response.get("movements").get(0).get("movementType").asText()).isEqualTo("CLIENTE_A_PLANTA");
+        assertThat(response.get("movements").get(0).get("originCustomerName").asText()).isEqualTo("Cliente");
+        Cylinder updated = cylinderRepository.findById(cylinder.getId()).orElseThrow();
+        assertThat(updated.getCurrentLocationType()).isEqualTo(CylinderLocationType.PLANTA);
+        assertThat(updated.getCurrentWarehouseId()).isEqualTo(warehouse.getId());
+        assertThat(updated.getCurrentCustomerName()).isNull();
     }
 
     @Test
@@ -545,24 +551,27 @@ class SalesNoteControllerTests {
     }
 
     @Test
-    void rejectsCollectedCylinderFromDifferentCustomer() throws Exception {
+    void createsCollectedLineEvenWhenCylinderBelongsToDifferentCustomer() throws Exception {
         Cylinder cylinder = createCylinderInCustomer("Cliente Actual");
 
-        mockMvc.perform(post("/api/sales-notes")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "noteNumber": "%s",
-                                  "customerName": "Cliente Diferente",
-                                  "noteDate": "2026-06-02T10:30:00",
-                                "collectedCylinders": [
-                                  {
-                                    "cylinderId": %d
-                                  }
-                                ]
-                                }
-                                """.formatted(next("NV-COL-BAD-CUSTOMER"), cylinder.getId())))
-                .andExpect(status().isBadRequest());
+        JsonNode response = postSalesNote("""
+                {
+                  "noteNumber": "%s",
+                  "customerName": "Cliente Diferente",
+                  "noteDate": "2026-06-02T10:30:00",
+                "collectedCylinders": [
+                  {
+                    "cylinderId": %d
+                  }
+                ]
+                }
+                """.formatted(next("NV-COL-FLEX-CUSTOMER"), cylinder.getId()));
+
+        assertThat(response.get("movements").get(0).get("movementType").asText()).isEqualTo("CLIENTE_A_PLANTA");
+        assertThat(response.get("movements").get(0).get("originCustomerName").asText()).isEqualTo("Cliente Diferente");
+        Cylinder updated = cylinderRepository.findById(cylinder.getId()).orElseThrow();
+        assertThat(updated.getCurrentLocationType()).isEqualTo(CylinderLocationType.PLANTA);
+        assertThat(updated.getCurrentCustomerName()).isNull();
     }
 
     private JsonNode postSalesNote(String body) throws Exception {

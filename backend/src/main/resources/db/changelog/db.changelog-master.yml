@@ -781,3 +781,12 @@ databaseChangeLog:
                   name: updated_at
                   valueComputed: CURRENT_TIMESTAMP
             where: username = 'admin'
+  - changeSet:
+      id: 020-seed-oxipur-cylinders
+      author: codex
+      changes:
+        - sqlFile:
+            path: 020_seed_oxipur_cylinders.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true

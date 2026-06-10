@@ -648,7 +648,20 @@ button {
   animation: modalPanelIn 180ms ease both;
 }
 
-.modalOverlay.closing .profileEditModal {
+.detailModal {
+  width: min(100%, 820px);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(8, 49, 61, 0.2);
+  animation: modalPanelIn 180ms ease both;
+}
+
+.modalOverlay.closing .profileEditModal,
+.modalOverlay.closing .detailModal {
   animation: modalPanelOut 180ms ease both;
 }
 
@@ -863,6 +876,21 @@ button {
   opacity: 0.45;
 }
 
+.tableLinkButton {
+  min-height: 34px;
+  border: 1px solid #b9d6e5;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #0e5d73;
+  background: #f2f9fc;
+  font-weight: 750;
+}
+
+.tableLinkButton:hover {
+  border-color: #0b9fc1;
+  background: #e3f6fb;
+}
+
 .notice {
   border: 1px solid #f2d38f;
   border-radius: 8px;
@@ -1063,6 +1091,251 @@ tr:last-child td {
   margin-bottom: 18px;
 }
 
+.clientsToolbar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.clientsToolbar > div,
+.clientStats > div {
+  min-height: 78px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #f8fcff;
+}
+
+.clientsToolbar span,
+.clientDetailHeader span,
+.clientStats span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.clientsToolbar strong,
+.clientStats strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.clientsLayout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.8fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.clientListPanel,
+.clientDetailPanel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.clientListPanel {
+  overflow: hidden;
+}
+
+.clientListHeader {
+  min-height: 54px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  background: #eef6fb;
+}
+
+.clientListHeader span {
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  color: #0e5d73;
+  background: #dff5fb;
+  font-weight: 750;
+}
+
+.clientList {
+  max-height: 620px;
+  overflow: auto;
+  display: grid;
+}
+
+.clientListButton {
+  width: 100%;
+  min-height: 72px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink);
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.clientListButton:last-child {
+  border-bottom: 0;
+}
+
+.clientListButton:hover,
+.clientListButton.active {
+  background: #f0f9fc;
+}
+
+.clientListButton strong,
+.clientListButton em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clientListButton strong {
+  font-size: 15px;
+}
+
+.clientListButton em {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.clientListButton b {
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 0 10px;
+  display: inline-grid;
+  place-items: center;
+  color: #ffffff;
+  background: #0b9fc1;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.inventoryListButton b {
+  background: #164153;
+}
+
+.clientOpenIcon {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #d4e4ef;
+  border-radius: 8px;
+  display: inline-grid;
+  place-items: center;
+  justify-self: end;
+  color: #164153;
+  background: #ffffff;
+}
+
+.clientListButton:hover .clientOpenIcon {
+  border-color: #0b9fc1;
+  color: #0e5d73;
+  background: #e3f6fb;
+}
+
+.clientListButton .iconBtn {
+  justify-self: end;
+}
+
+.clientDetailPanel {
+  min-width: 0;
+  padding: 18px;
+}
+
+.clientDetailHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.clientDetailHeader h3 {
+  margin: 6px 0 0;
+  font-size: 24px;
+  overflow-wrap: anywhere;
+}
+
+.clientDetailHeader > strong {
+  min-height: 34px;
+  border-radius: 999px;
+  padding: 7px 12px;
+  color: #146333;
+  background: #d9f8e5;
+  white-space: nowrap;
+}
+
+.clientStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.detailGrid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.detailGrid div,
+.detailNote {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #f8fcff;
+}
+
+.detailGrid span,
+.detailNote span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.detailGrid strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.detailNote {
+  margin-bottom: 16px;
+}
+
+.detailNote p {
+  margin: 8px 0 0;
+  color: #34465d;
+}
+
 .customerSummary {
   display: grid;
   gap: 16px;
@@ -1227,11 +1500,15 @@ tr:last-child td {
   .metricGrid,
   .formGrid.five,
   .formGrid.four,
-  .profileGrid {
+  .profileGrid,
+  .clientsToolbar,
+  .clientStats,
+  .detailGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .splitGrid {
+  .splitGrid,
+  .clientsLayout {
     grid-template-columns: 1fr;
   }
 
@@ -1303,6 +1580,10 @@ tr:last-child td {
     .deliveredLine,
     .collectedLine,
     .profileGrid,
+    .clientsToolbar,
+    .clientStats,
+    .detailGrid,
+    .detailGrid.compact,
     .dateFilter,
     .previewMetaGrid,
     .utilityMetrics,
