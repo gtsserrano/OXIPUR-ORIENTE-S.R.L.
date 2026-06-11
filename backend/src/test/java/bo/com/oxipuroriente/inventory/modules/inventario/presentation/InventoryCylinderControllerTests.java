@@ -68,7 +68,7 @@ class InventoryCylinderControllerTests {
 
         assertThat(response.size()).isEqualTo(1);
         assertThat(response.get(0).get("cylinderId").longValue()).isEqualTo(cylinder.getId());
-        assertThat(response.get(0).get("currentCustomerName").asText()).isEqualTo("Cliente Inventario");
+        assertThat(response.get(0).get("currentCustomerName").asText()).isEqualTo("CLIENTE INVENTARIO");
         assertThat(response.get(0).get("lastDeliveryNoteNumber").asText()).isEqualTo(noteNumber);
         assertThat(response.get(0).get("lastDeliveryDate").asText()).isEqualTo("2026-06-03");
     }
@@ -110,7 +110,7 @@ class InventoryCylinderControllerTests {
                 .getResponse()
                 .getContentAsString());
 
-        assertThat(response.get("customerName").asText()).isEqualTo("Cliente Resumen");
+        assertThat(response.get("customerName").asText()).isEqualTo("CLIENTE RESUMEN");
         assertThat(response.get("totalCylinders").intValue()).isEqualTo(2);
         assertThat(textValues(response.get("cylinders"), "serialNumber"))
                 .containsExactlyInAnyOrder(first.getSerialNumber(), second.getSerialNumber());

@@ -790,3 +790,17 @@ databaseChangeLog:
             relativeToChangelogFile: true
             splitStatements: true
             stripComments: true
+  - changeSet:
+      id: 021-uppercase-customer-names
+      author: codex
+      changes:
+        - sql:
+            sql: UPDATE cylinders SET current_customer_name = UPPER(TRIM(current_customer_name)) WHERE current_customer_name IS NOT NULL
+        - sql:
+            sql: UPDATE sales_notes SET customer_name = UPPER(TRIM(customer_name)) WHERE customer_name IS NOT NULL
+        - sql:
+            sql: UPDATE inventory_movements SET origin_customer_name = UPPER(TRIM(origin_customer_name)) WHERE origin_customer_name IS NOT NULL
+        - sql:
+            sql: UPDATE inventory_movements SET destination_customer_name = UPPER(TRIM(destination_customer_name)) WHERE destination_customer_name IS NOT NULL
+        - sql:
+            sql: UPDATE sales_note_collected_cylinders SET origin_customer_name = UPPER(TRIM(origin_customer_name)) WHERE origin_customer_name IS NOT NULL

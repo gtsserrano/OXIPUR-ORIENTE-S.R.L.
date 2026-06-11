@@ -80,7 +80,7 @@ class SalesNoteControllerTests {
 
         Cylinder updated = cylinderRepository.findById(cylinder.getId()).orElseThrow();
         assertThat(updated.getCurrentLocationType()).isEqualTo(CylinderLocationType.CLIENTE);
-        assertThat(updated.getCurrentCustomerName()).isEqualTo("Cliente Entrega");
+        assertThat(updated.getCurrentCustomerName()).isEqualTo("CLIENTE ENTREGA");
     }
 
     @Test
@@ -109,7 +109,7 @@ class SalesNoteControllerTests {
         assertThat(response.get("movements").size()).isEqualTo(1);
         assertThat(response.get("movements").get(0).get("movementType").asText()).isEqualTo("CLIENTE_A_PLANTA");
         assertThat(response.get("movements").get(0).get("productId").longValue()).isEqualTo(product.getId());
-        assertThat(response.get("movements").get(0).get("originCustomerName").asText()).isEqualTo("Cliente Retorno");
+        assertThat(response.get("movements").get(0).get("originCustomerName").asText()).isEqualTo("CLIENTE RETORNO");
         assertThat(response.get("collectedCylinders").get(0).has("originCustomerName")).isFalse();
         assertThat(response.get("collectedCylinders").get(0).get("productId").longValue()).isEqualTo(product.getId());
         assertThat(response.get("collectedCylinders").get(0).get("productName").asText()).isEqualTo(product.getName());
@@ -230,7 +230,7 @@ class SalesNoteControllerTests {
         assertThat(response.get("movements").get(0).get("movementType").asText()).isEqualTo("PLANTA_A_CLIENTE");
         Cylinder updated = cylinderRepository.findById(cylinder.getId()).orElseThrow();
         assertThat(updated.getCurrentLocationType()).isEqualTo(CylinderLocationType.CLIENTE);
-        assertThat(updated.getCurrentCustomerName()).isEqualTo("Cliente");
+        assertThat(updated.getCurrentCustomerName()).isEqualTo("CLIENTE");
     }
 
     @Test
@@ -252,7 +252,7 @@ class SalesNoteControllerTests {
                 """.formatted(next("NV-FLEX-COL"), cylinder.getId()));
 
         assertThat(response.get("movements").get(0).get("movementType").asText()).isEqualTo("CLIENTE_A_PLANTA");
-        assertThat(response.get("movements").get(0).get("originCustomerName").asText()).isEqualTo("Cliente");
+        assertThat(response.get("movements").get(0).get("originCustomerName").asText()).isEqualTo("CLIENTE");
         Cylinder updated = cylinderRepository.findById(cylinder.getId()).orElseThrow();
         assertThat(updated.getCurrentLocationType()).isEqualTo(CylinderLocationType.PLANTA);
         assertThat(updated.getCurrentWarehouseId()).isEqualTo(warehouse.getId());
@@ -344,12 +344,12 @@ class SalesNoteControllerTests {
         JsonNode byMonth = getJson("/api/sales-notes?dateFilterType=MONTH&year=2026&month=6");
         JsonNode byYear = getJson("/api/sales-notes?dateFilterType=YEAR&year=2027");
 
-        assertThat(hasNoteForCustomer(byDay, "Cliente Fecha Dia")).isTrue();
-        assertThat(hasNoteForCustomer(byDay, "Cliente Fecha Mes")).isFalse();
-        assertThat(hasNoteForCustomer(byMonth, "Cliente Fecha Dia")).isTrue();
-        assertThat(hasNoteForCustomer(byMonth, "Cliente Fecha Mes")).isTrue();
-        assertThat(hasNoteForCustomer(byMonth, "Cliente Fecha Anio")).isFalse();
-        assertThat(hasNoteForCustomer(byYear, "Cliente Fecha Anio")).isTrue();
+        assertThat(hasNoteForCustomer(byDay, "CLIENTE FECHA DIA")).isTrue();
+        assertThat(hasNoteForCustomer(byDay, "CLIENTE FECHA MES")).isFalse();
+        assertThat(hasNoteForCustomer(byMonth, "CLIENTE FECHA DIA")).isTrue();
+        assertThat(hasNoteForCustomer(byMonth, "CLIENTE FECHA MES")).isTrue();
+        assertThat(hasNoteForCustomer(byMonth, "CLIENTE FECHA ANIO")).isFalse();
+        assertThat(hasNoteForCustomer(byYear, "CLIENTE FECHA ANIO")).isTrue();
     }
 
     @Test
@@ -526,7 +526,7 @@ class SalesNoteControllerTests {
 
         Cylinder updated = cylinderRepository.findById(cylinder.getId()).orElseThrow();
         assertThat(updated.getCurrentLocationType()).isEqualTo(CylinderLocationType.CLIENTE);
-        assertThat(updated.getCurrentCustomerName()).isEqualTo("Cliente Cancelacion Recojo");
+        assertThat(updated.getCurrentCustomerName()).isEqualTo("CLIENTE CANCELACION RECOJO");
     }
 
     @Test
@@ -547,7 +547,7 @@ class SalesNoteControllerTests {
                 """.formatted(next("NV-COL-NO-CUSTOMER"), cylinder.getId()));
 
         assertThat(response.get("movements").get(0).get("movementType").asText()).isEqualTo("CLIENTE_A_PLANTA");
-        assertThat(response.get("movements").get(0).get("originCustomerName").asText()).isEqualTo("Cliente Recojo");
+        assertThat(response.get("movements").get(0).get("originCustomerName").asText()).isEqualTo("CLIENTE RECOJO");
     }
 
     @Test
@@ -568,7 +568,7 @@ class SalesNoteControllerTests {
                 """.formatted(next("NV-COL-FLEX-CUSTOMER"), cylinder.getId()));
 
         assertThat(response.get("movements").get(0).get("movementType").asText()).isEqualTo("CLIENTE_A_PLANTA");
-        assertThat(response.get("movements").get(0).get("originCustomerName").asText()).isEqualTo("Cliente Diferente");
+        assertThat(response.get("movements").get(0).get("originCustomerName").asText()).isEqualTo("CLIENTE DIFERENTE");
         Cylinder updated = cylinderRepository.findById(cylinder.getId()).orElseThrow();
         assertThat(updated.getCurrentLocationType()).isEqualTo(CylinderLocationType.PLANTA);
         assertThat(updated.getCurrentCustomerName()).isNull();

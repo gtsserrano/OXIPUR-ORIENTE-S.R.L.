@@ -3,6 +3,7 @@ package bo.com.oxipuroriente.inventory.modules.ventas.application;
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -78,10 +79,11 @@ public class SalesNoteService {
         validateNoRepeatedCylinder(delivered, collected);
 
         SalesNoteSourceType sourceType = request.sourceType() == null ? SalesNoteSourceType.USER : request.sourceType();
+        String customerName = normalizeCustomerName(request.customerName());
 
         SalesNote salesNote = new SalesNote();
         salesNote.setNoteNumber(request.noteNumber());
-        salesNote.setCustomerName(request.customerName());
+        salesNote.setCustomerName(customerName);
         salesNote.setNoteDate(request.noteDate());
         salesNote.setObservations(request.observations());
         salesNote.setUtilityAmount(utilityAmountOrZero(request.utilityAmount()));
@@ -144,7 +146,7 @@ public class SalesNoteService {
             throw new SalesNoteException("Cancelled sales notes cannot be edited");
         }
         if (request.customerName() != null && !request.customerName().isBlank()) {
-            salesNote.setCustomerName(request.customerName());
+            salesNote.setCustomerName(normalizeCustomerName(request.customerName()));
         }
         if (request.noteDate() != null) {
             salesNote.setNoteDate(request.noteDate());
@@ -384,6 +386,10 @@ public class SalesNoteService {
             return ownerName.trim();
         }
         return cylinder.getOwner();
+    }
+
+    private String normalizeCustomerName(String customerName) {
+        return customerName.trim().toUpperCase(Locale.ROOT);
     }
 
     private boolean sameCustomer(String currentCustomerName, String requestedCustomerName) {

@@ -232,6 +232,87 @@ button {
   box-shadow: 0 0 0 7px rgba(42, 211, 241, 0.1);
 }
 
+.navGroup {
+  display: grid;
+  gap: 6px;
+}
+
+.navParent {
+  position: relative;
+}
+
+.navLabel {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.navChevron {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: #9fc7d4;
+  transition: transform 180ms ease, color 180ms ease;
+}
+
+.navChevron.open {
+  color: #d8edf4;
+  transform: rotate(180deg);
+}
+
+.navChildren {
+  display: grid;
+  gap: 5px;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding-left: 30px;
+  transform: translateY(-4px);
+  transition: max-height 220ms ease, opacity 180ms ease, transform 180ms ease;
+}
+
+.navChildren.open {
+  max-height: 110px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.navChild {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px 0 8px;
+  background: transparent;
+  color: #c2dbe4;
+  font-size: 14px;
+  font-weight: 550;
+  text-align: left;
+}
+
+.navChild:hover,
+.navChild.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.navBranchLine {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border: 1.5px solid rgba(194, 219, 228, 0.7);
+  border-radius: 50%;
+  background: rgba(8, 49, 61, 0.7);
+  box-shadow: 0 0 0 4px rgba(42, 211, 241, 0.06);
+}
+
+.navChild.active .navBranchLine {
+  border-color: #2ad3f1;
+  background: #2ad3f1;
+  box-shadow: 0 0 0 5px rgba(42, 211, 241, 0.12);
+}
+
 .navDot {
   width: 10px;
   height: 10px;

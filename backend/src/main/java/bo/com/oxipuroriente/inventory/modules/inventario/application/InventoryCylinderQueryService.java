@@ -2,6 +2,7 @@ package bo.com.oxipuroriente.inventory.modules.inventario.application;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -53,7 +54,7 @@ public class InventoryCylinderQueryService {
                 .stream()
                 .filter(cylinder -> sameCustomer(cylinder.currentCustomerName(), customerName))
                 .toList();
-        return CustomerCylinderInventoryResponse.from(customerName.trim(), cylinders);
+        return CustomerCylinderInventoryResponse.from(normalizeCustomerName(customerName), cylinders);
     }
 
     private InventoryCylinderResponse toResponse(Cylinder cylinder) {
@@ -99,5 +100,9 @@ public class InventoryCylinderQueryService {
             return false;
         }
         return currentCustomerName.trim().equalsIgnoreCase(requestedCustomerName.trim());
+    }
+
+    private String normalizeCustomerName(String customerName) {
+        return customerName.trim().toUpperCase(Locale.ROOT);
     }
 }

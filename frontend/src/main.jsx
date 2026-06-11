@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import {
   Activity,
   ArrowDownToLine,
   ArrowUpFromLine,
   Boxes,
+  ChevronDown,
   ClipboardList,
   ContactRound,
   Edit3,
@@ -34,12 +36,23 @@ const PRESENCE_HEARTBEAT_MS = 30000;
 const PROFILE_REFRESH_MS = 30000;
 const PROFILE_EDITOR_CLOSE_MS = 180;
 const DETAIL_MODAL_CLOSE_MS = 180;
+const SALE_NOTE_TEMPLATE_URL = "/formato-nota-entrega.pdf";
+const SALE_NOTE_TEMPLATE_PAGE_INDEX = 1;
+const SALE_NOTE_ROWS_PER_PAGE = 16;
 
 const navItems = [
   { id: "dashboard", label: "Centro operativo", icon: LayoutDashboard },
   { id: "inventory", label: "Inventario", icon: Boxes },
   { id: "clients", label: "Clientes", icon: ContactRound },
-  { id: "sales", label: "Notas de venta", icon: ClipboardList },
+  {
+    id: "sales",
+    label: "Notas de venta",
+    icon: ClipboardList,
+    children: [
+      { id: "sales-create", label: "Crear nota de venta" },
+      { id: "sales-registered", label: "Notas de venta registradas" }
+    ]
+  },
   { id: "printing", label: "Impresión", icon: Printer },
   { id: "utilities", label: "Utilidades", icon: Banknote },
   { id: "cylinders", label: "Cilindros", icon: Gauge },
@@ -449,7 +462,7 @@ function App() {
         await api(`/api/sales-notes/${form.id}`, {
           method: "PATCH",
           body: {
-            customerName: form.customerName,
+            customerName: uppercaseCustomerName(form.customerName),
             noteDate: form.noteDate,
             observations: form.observations || null,
             utilityAmount: moneyInputValue(form.utilityAmount)
@@ -516,7 +529,7 @@ function App() {
         method: "POST",
         body: {
           noteNumber: form.noteNumber,
-          customerName: form.customerName,
+          customerName: uppercaseCustomerName(form.customerName),
           noteDate: form.noteDate,
           observations: form.observations || null,
           utilityAmount: moneyInputValue(form.utilityAmount),
@@ -636,6 +649,7 @@ function App() {
         collectedCylinders: [{ ...emptyCollectedLine }]
       }
     }));
+    setActive("sales-create");
   }
 
   async function runAction(action) {
@@ -667,6 +681,7 @@ function App() {
     return <WelcomeScreen name={session?.profile?.fullName || session?.profile?.username || "usuario"} />;
   }
 
+  const pageKey = active === "sales" ? "sales-create" : active;
   const page = {
     dashboard: (
       <Dashboard
@@ -688,8 +703,25 @@ function App() {
       />
     ),
     clients: <ClientsView initialInventory={state.inventory} />,
-    sales: (
+    "sales-create": (
       <SalesView
+        mode="create"
+        forms={forms}
+        setForms={setForms}
+        createSale={createSale}
+        cylinders={state.cylinders}
+        products={state.products}
+        salesNotes={state.salesNotes}
+        editSale={editSale}
+        cancelSale={cancelSale}
+        salesDateFilter={salesDateFilter}
+        setSalesDateFilter={setSalesDateFilter}
+        searchSalesNotes={searchSalesNotes}
+      />
+    ),
+    "sales-registered": (
+      <SalesView
+        mode="registered"
         forms={forms}
         setForms={setForms}
         createSale={createSale}
@@ -718,13 +750,13 @@ function App() {
     profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} updateProfile={updateProfile} profiles={state.profiles} loadProfiles={loadProfiles} editProfile={editProfile} closeProfileEditor={closeProfileEditor} profileEditorClosing={profileEditorClosing} deleteProfile={deleteProfile} />,
     printing: <PrintingView salesNotes={state.salesNotes} selectedPrintNoteId={selectedPrintNoteId} setSelectedPrintNoteId={setSelectedPrintNoteId} printSaleNote={printSaleNote} />,
     profile: <ProfileView />
-  }[active];
+  }[pageKey];
 
-  const activeMeta = navItems.find((item) => item.id === active);
+  const activeMeta = findNavItem(navItems, pageKey) || navItems[0];
 
   return (
     <div className="appShell">
-      <Sidebar active={active} setActive={setActive} />
+      <Sidebar active={pageKey} setActive={setActive} />
       <main className="mainPane">
         <Topbar title={activeMeta.label} session={session} onLogout={logout} />
         <section className="workspace">
@@ -737,6 +769,15 @@ function App() {
 }
 
 function Sidebar({ active, setActive }) {
+  const [expandedGroups, setExpandedGroups] = useState({});
+
+  useEffect(() => {
+    const parent = findNavParent(navItems, active);
+    if (parent) {
+      setExpandedGroups((value) => ({ ...value, [parent.id]: true }));
+    }
+  }, [active]);
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -749,8 +790,48 @@ function Sidebar({ active, setActive }) {
       <nav className="navList">
         {navItems.map((item) => {
           const Icon = item.icon;
+          const hasChildren = Boolean(item.children?.length);
+          const childActive = hasChildren && item.children.some((child) => child.id === active);
+          const expanded = hasChildren && Boolean(expandedGroups[item.id]);
+
+          if (hasChildren) {
+            return (
+              <div className="navGroup" key={item.id}>
+                <button
+                  className={childActive ? "navItem navParent active" : "navItem navParent"}
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() => {
+                    setExpandedGroups((value) => ({ ...value, [item.id]: !expanded }));
+                    if (!childActive) {
+                      setActive(item.children[0].id);
+                    }
+                  }}
+                >
+                  <span className="navDot" />
+                  <Icon size={16} />
+                  <span className="navLabel">{item.label}</span>
+                  <ChevronDown className={expanded ? "navChevron open" : "navChevron"} size={16} />
+                </button>
+                <div className={expanded ? "navChildren open" : "navChildren"}>
+                  {item.children.map((child) => (
+                    <button
+                      key={child.id}
+                      type="button"
+                      className={active === child.id ? "navChild active" : "navChild"}
+                      onClick={() => setActive(child.id)}
+                    >
+                      <span className="navBranchLine" />
+                      {child.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
           return (
-            <button key={item.id} className={active === item.id ? "navItem active" : "navItem"} onClick={() => setActive(item.id)}>
+            <button key={item.id} type="button" className={active === item.id ? "navItem active" : "navItem"} onClick={() => setActive(item.id)}>
               <span className="navDot" />
               <Icon size={16} />
               {item.label}
@@ -764,6 +845,19 @@ function Sidebar({ active, setActive }) {
       </div>
     </aside>
   );
+}
+
+function findNavItem(items, id) {
+  for (const item of items) {
+    if (item.id === id) return item;
+    const child = item.children?.find((entry) => entry.id === id);
+    if (child) return child;
+  }
+  return null;
+}
+
+function findNavParent(items, id) {
+  return items.find((item) => item.children?.some((child) => child.id === id)) || null;
 }
 
 function Topbar({ title, session, onLogout }) {
@@ -1103,13 +1197,19 @@ function ClientsView({ initialInventory = [] }) {
   );
 }
 
-function SalesView({ forms, setForms, createSale, cylinders, products, salesNotes, editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes }) {
+function SalesView({ mode = "create", forms, setForms, createSale, cylinders, products, salesNotes, editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes }) {
   const form = forms.sale;
   const activeCylinders = cylinders.filter((item) => item.active !== false);
   const activeProducts = products.filter((item) => item.active !== false);
+  const showingCreation = mode === "create";
   return (
     <>
-      <PageIntro eyebrow="VENTAS" title="Notas de venta" subtitle="Registra entregas y recojos; el backend genera los movimientos." />
+      <PageIntro
+        eyebrow="VENTAS"
+        title={showingCreation ? "Crear nota de venta" : "Notas de venta registradas"}
+        subtitle={showingCreation ? "Registra entregas y recojos; el backend genera los movimientos." : "Consulta, edita o anula las notas de venta ya registradas."}
+      />
+      {showingCreation && (
       <Card title={form.id ? "Editar nota" : "Nueva nota"}>
         <div className="salesComposer">
           <form onSubmit={createSale}>
@@ -1118,7 +1218,7 @@ function SalesView({ forms, setForms, createSale, cylinders, products, salesNote
                 <input required disabled={Boolean(form.id)} value={form.noteNumber} onChange={(event) => setNested(setForms, "sale", "noteNumber", event.target.value)} placeholder="NV-001" />
               </Field>
               <Field label="Cliente">
-                <input required value={form.customerName} onChange={(event) => setNested(setForms, "sale", "customerName", event.target.value)} placeholder="Cliente" />
+                <input required value={form.customerName} onChange={(event) => setNested(setForms, "sale", "customerName", uppercaseCustomerName(event.target.value))} placeholder="Cliente" />
               </Field>
               <Field label="Fecha">
                 <input required type="datetime-local" value={form.noteDate} onChange={(event) => setNested(setForms, "sale", "noteDate", event.target.value)} />
@@ -1214,6 +1314,8 @@ function SalesView({ forms, setForms, createSale, cylinders, products, salesNote
         </div>
         <SalePreview form={form} cylinders={cylinders} products={products} />
       </Card>
+      )}
+      {!showingCreation && (
       <Card title="Notas registradas">
         <DatePeriodFilter
           value={salesDateFilter}
@@ -1240,6 +1342,7 @@ function SalesView({ forms, setForms, createSale, cylinders, products, salesNote
           empty="Sin notas registradas"
         />
       </Card>
+      )}
     </>
   );
 }
@@ -1951,8 +2054,8 @@ function buildCustomerGroups(inventory) {
   (inventory || [])
     .filter((item) => item.currentLocationType === "CLIENTE" && String(item.currentCustomerName || "").trim())
     .forEach((item) => {
-      const name = item.currentCustomerName.trim();
-      const key = name.toLowerCase();
+      const name = uppercaseCustomerName(item.currentCustomerName);
+      const key = name.toLocaleLowerCase("es-BO");
       if (!groups.has(key)) {
         groups.set(key, { name, cylinders: [], totalCapacity: 0 });
       }
@@ -1985,258 +2088,190 @@ function showSaleDetail(note) {
   window.alert(`Nota ${note.noteNumber}\nEstado: ${note.status}\nCliente: ${note.customerName}\nUtilidad: ${money(note.utilityAmount)}\n\nCilindros entregados: ${delivered}\nCilindros recogidos: ${collected}\n\nMovimientos: ${movements}`);
 }
 
-function printSaleNote(note) {
+async function printSaleNote(note) {
   const printWindow = window.open("", "_blank", "width=900,height=1100");
   if (!printWindow) {
     window.alert("El navegador bloqueó la ventana de impresión. Habilita ventanas emergentes para este sitio.");
     return;
   }
 
-  const delivered = note.deliveredCylinders || [];
-  const collected = note.collectedCylinders || [];
-  const totalDeliveredCapacity = sumNoteCapacity(delivered);
-  const totalCollectedCapacity = sumNoteCapacity(collected);
-  const logoUrl = `${window.location.origin}/oxipur-sidebar-logo.png`;
-  const statusText = note.status === "CANCELLED" ? "ANULADA" : "REGISTRADA";
-
-  printWindow.document.open();
-  printWindow.document.write(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Nota de entrega ${escapeHtml(note.noteNumber || "")}</title>
-    <style>
-      @page { size: letter; margin: 12mm; }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        color: #111827;
-        font-family: Arial, Helvetica, sans-serif;
-        background: #f3f6f8;
-      }
-      .sheet {
-        width: 190mm;
-        min-height: 250mm;
-        margin: 0 auto;
-        padding: 12mm;
-        background: #ffffff;
-        border: 1px solid #cfdbe5;
-      }
-      .header {
-        display: grid;
-        grid-template-columns: 48mm 1fr 42mm;
-        gap: 8mm;
-        align-items: center;
-        border-bottom: 2px solid #0b6d8e;
-        padding-bottom: 7mm;
-      }
-      .logo {
-        width: 42mm;
-        height: auto;
-      }
-      h1 {
-        margin: 0;
-        text-align: center;
-        color: #082f49;
-        font-size: 22px;
-        letter-spacing: 0;
-      }
-      .copy {
-        margin-top: 2mm;
-        text-align: center;
-        color: #64748b;
-        font-size: 11px;
-        font-weight: 700;
-      }
-      .noteBox {
-        border: 1px solid #94a3b8;
-        border-radius: 4px;
-        padding: 4mm;
-        text-align: center;
-      }
-      .noteBox span,
-      .field span,
-      .summaryBox span {
-        display: block;
-        color: #64748b;
-        font-size: 10px;
-        font-weight: 700;
-        text-transform: uppercase;
-      }
-      .noteBox strong {
-        display: block;
-        margin-top: 2mm;
-        color: #0f172a;
-        font-size: 18px;
-      }
-      .meta {
-        display: grid;
-        grid-template-columns: 1.5fr 1fr 0.8fr;
-        gap: 4mm;
-        margin-top: 8mm;
-      }
-      .field,
-      .summaryBox {
-        min-height: 16mm;
-        border: 1px solid #cbd5e1;
-        border-radius: 4px;
-        padding: 3mm;
-      }
-      .field strong,
-      .summaryBox strong {
-        display: block;
-        margin-top: 2mm;
-        color: #111827;
-        font-size: 13px;
-      }
-      .sectionTitle {
-        margin: 8mm 0 3mm;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        color: #082f49;
-        font-size: 13px;
-        font-weight: 800;
-        text-transform: uppercase;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        table-layout: fixed;
-        font-size: 11px;
-      }
-      th,
-      td {
-        border: 1px solid #94a3b8;
-        padding: 2.2mm;
-        vertical-align: top;
-      }
-      th {
-        color: #0f172a;
-        background: #eaf4f8;
-        font-size: 10px;
-        text-transform: uppercase;
-      }
-      td.empty {
-        height: 12mm;
-        color: #94a3b8;
-        text-align: center;
-      }
-      .summary {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 4mm;
-        margin-top: 8mm;
-      }
-      .observations {
-        margin-top: 6mm;
-        min-height: 20mm;
-      }
-      .signatures {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 16mm;
-        margin-top: 18mm;
-      }
-      .signature {
-        padding-top: 14mm;
-        border-top: 1px solid #111827;
-        text-align: center;
-        color: #334155;
-        font-size: 11px;
-        font-weight: 700;
-      }
-      .footer {
-        margin-top: 8mm;
-        border-top: 1px solid #cbd5e1;
-        padding-top: 3mm;
-        color: #64748b;
-        font-size: 10px;
-        text-align: center;
-      }
-      @media print {
-        body { background: #ffffff; }
-        .sheet { border: 0; width: auto; min-height: auto; margin: 0; padding: 0; }
-      }
-    </style>
-  </head>
-  <body>
-    <main class="sheet">
-      <header class="header">
-        <img class="logo" src="${logoUrl}" alt="OXIPUR" />
-        <div>
-          <h1>NOTA DE ENTREGA</h1>
-          <div class="copy">OXIPUR ORIENTE S.R.L.</div>
-        </div>
-        <div class="noteBox">
-          <span>Nro. nota</span>
-          <strong>${escapeHtml(note.noteNumber || "-")}</strong>
-        </div>
-      </header>
-      <section class="meta">
-        <div class="field"><span>Cliente</span><strong>${escapeHtml(note.customerName || "-")}</strong></div>
-        <div class="field"><span>Fecha y hora</span><strong>${escapeHtml(formatDateTime(note.noteDate))}</strong></div>
-        <div class="field"><span>Estado</span><strong>${escapeHtml(statusText)}</strong></div>
-      </section>
-      ${salePrintTable("Cilindros entregados", delivered)}
-      ${salePrintTable("Cilindros recogidos", collected)}
-      <section class="summary">
-        <div class="summaryBox"><span>Total entregados</span><strong>${delivered.length}</strong></div>
-        <div class="summaryBox"><span>Total recogidos</span><strong>${collected.length}</strong></div>
-        <div class="summaryBox"><span>Capacidad total</span><strong>${formatCapacity(totalDeliveredCapacity + totalCollectedCapacity)} m3</strong></div>
-      </section>
-      <div class="field observations"><span>Observaciones</span><strong>${escapeHtml(note.observations || "-")}</strong></div>
-      <section class="signatures">
-        <div class="signature">Entregado por</div>
-        <div class="signature">Recibido por</div>
-      </section>
-      <footer class="footer">Documento generado desde el sistema de gestión de inventario OXIPUR ORIENTE S.R.L.</footer>
-    </main>
-    <script>
-      window.addEventListener("load", () => {
-        window.setTimeout(() => {
-          window.print();
-        }, 350);
-      });
-    </script>
-  </body>
-</html>`);
+  printWindow.document.write("<!doctype html><title>Generando nota...</title><body style=\"font-family: Arial, sans-serif; padding: 24px;\">Generando nota de entrega...</body>");
   printWindow.document.close();
+
+  try {
+    const pdfBytes = await buildSaleNotePdf(note);
+    const pdfUrl = URL.createObjectURL(new Blob([pdfBytes], { type: "application/pdf" }));
+    printWindow.location.href = pdfUrl;
+    window.setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch {
+        // The built-in PDF viewer may own the print flow; the tab still opens with the generated PDF.
+      }
+    }, 1200);
+    window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
+  } catch (error) {
+    printWindow.close();
+    window.alert(`No se pudo generar la nota de entrega: ${error.message}`);
+  }
 }
 
-function salePrintTable(title, lines) {
-  return `<section>
-    <div class="sectionTitle">
-      <span>${escapeHtml(title)}</span>
-      <span>${lines.length} registro(s)</span>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th style="width: 10mm;">Nro.</th>
-          <th style="width: 28mm;">Cilindro</th>
-          <th>Producto</th>
-          <th style="width: 24mm;">Capacidad</th>
-          <th>Propiedad</th>
-          <th>Observacion</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${lines.length ? lines.map((line, index) => salePrintRow(line, index)).join("") : `<tr><td class="empty" colspan="6">Sin registros</td></tr>`}
-      </tbody>
-    </table>
-  </section>`;
+async function buildSaleNotePdf(note) {
+  const response = await fetch(SALE_NOTE_TEMPLATE_URL);
+  if (!response.ok) {
+    throw new Error("No se encontró la plantilla PDF.");
+  }
+
+  const templateBytes = await response.arrayBuffer();
+  const template = await PDFDocument.load(templateBytes);
+  const output = await PDFDocument.create();
+  const regularFont = await output.embedFont(StandardFonts.Helvetica);
+  const boldFont = await output.embedFont(StandardFonts.HelveticaBold);
+  const templatePageIndex = Math.min(SALE_NOTE_TEMPLATE_PAGE_INDEX, template.getPageCount() - 1);
+  const rows = saleNotePdfRows(note);
+  const pages = chunkRows(rows.length ? rows : [], SALE_NOTE_ROWS_PER_PAGE);
+  const printablePages = pages.length ? pages : [[]];
+
+  for (const pageRows of printablePages) {
+    const [page] = await output.copyPages(template, [templatePageIndex]);
+    output.addPage(page);
+    drawSaleNotePage(page, note, pageRows, rows, regularFont, boldFont);
+  }
+
+  return output.save();
 }
 
-function salePrintRow(line, index) {
-  return `<tr>
-    <td>${index + 1}</td>
-    <td>${escapeHtml(line.serialNumber || line.cylinderId || "-")}</td>
-    <td>${escapeHtml(line.productName || line.productId || "-")}</td>
-    <td>${escapeHtml(formatCapacity(line.capacityM3))} m3</td>
-    <td>${escapeHtml(line.ownerName || "-")}</td>
-    <td>${escapeHtml(line.observations || "-")}</td>
-  </tr>`;
+function drawSaleNotePage(page, note, pageRows, allRows, regularFont, boldFont) {
+  const black = rgb(0, 0, 0);
+  const red = rgb(1, 0, 0);
+  const white = rgb(1, 1, 1);
+  const deliveredCount = (note.deliveredCylinders || []).length;
+  const collectedCount = (note.collectedCylinders || []).length;
+
+  coverPdfText(page, 474.2, 651.5, 66, 18, white);
+  drawPdfText(page, note.noteNumber || "", 475.9, 655.9, {
+    font: boldFont,
+    size: 13.68,
+    color: red,
+    maxWidth: 64
+  });
+  drawPdfText(page, uppercaseCustomerName(note.customerName || ""), 129.5, 612.46, {
+    font: regularFont,
+    size: 8.76,
+    color: black,
+    maxWidth: 205
+  });
+  drawPdfText(page, formatSaleNoteDateForPdf(note.noteDate), 124.5, 594.46, {
+    font: regularFont,
+    size: 8.76,
+    color: black,
+    maxWidth: 200
+  });
+  drawCenteredPdfText(page, String(allRows.length), 372, 601.06, 22, {
+    font: regularFont,
+    size: 8.76,
+    color: black
+  });
+  drawCenteredPdfText(page, String(deliveredCount), 437.5, 601.06, 22, {
+    font: regularFont,
+    size: 8.76,
+    color: black
+  });
+  drawCenteredPdfText(page, String(collectedCount), 505.18, 601.06, 22, {
+    font: regularFont,
+    size: 8.76,
+    color: black
+  });
+
+  pageRows.forEach((line, index) => drawSaleNotePdfRow(page, line, index, regularFont, black));
+
+  coverPdfText(page, 407, 334.5, 122, 15, white);
+  drawPdfText(page, `Bs ${formatMoneyPlain(note.utilityAmount)}`, 410, 337.73, {
+    font: regularFont,
+    size: 8.76,
+    color: black,
+    maxWidth: 118
+  });
+}
+
+function drawSaleNotePdfRow(page, line, index, font, color) {
+  const y = 551.47 - index * 12;
+  const detailY = y - 1.44;
+
+  drawPdfText(page, String(index + 1), index < 9 ? 83.4 : 81.48, y, { font, size: 7.44, color, maxWidth: 18 });
+  drawPdfText(page, line.serialNumber, 130.1, y, { font, size: 7.44, color, maxWidth: 70 });
+  drawPdfText(page, line.capacityM3, 220.01, y, { font, size: 7.44, color, maxWidth: 34 });
+  drawPdfText(page, line.ownerName, 286.13, detailY, { font, size: 7.44, color, maxWidth: 62 });
+  drawPdfText(page, line.status, 360.67, detailY, { font, size: 7.44, color, maxWidth: 52 });
+  drawPdfText(page, line.amount, 438.22, detailY, { font, size: 7.44, color, maxWidth: 38 });
+  drawPdfText(page, line.observations, 495.22, detailY, { font, size: 7.44, color, maxWidth: 42 });
+}
+
+function saleNotePdfRows(note) {
+  const delivered = (note.deliveredCylinders || []).map((line) => saleNotePdfRow(line, "Entregado"));
+  const collected = (note.collectedCylinders || []).map((line) => saleNotePdfRow(line, "Recibido"));
+  return [...delivered, ...collected];
+}
+
+function saleNotePdfRow(line, status) {
+  return {
+    serialNumber: String(line.serialNumber || line.cylinderId || ""),
+    capacityM3: formatCapacity(line.capacityM3),
+    ownerName: line.ownerName || "",
+    status,
+    amount: line.amount ? formatMoneyPlain(line.amount) : "",
+    observations: line.observations || ""
+  };
+}
+
+function drawPdfText(page, text, x, y, options) {
+  const value = fitPdfText(String(text || ""), options.font, options.size, options.maxWidth);
+  if (!value) return;
+  page.drawText(value, {
+    x,
+    y,
+    size: options.size,
+    font: options.font,
+    color: options.color
+  });
+}
+
+function drawCenteredPdfText(page, text, x, y, width, options) {
+  const value = fitPdfText(String(text || ""), options.font, options.size, width);
+  const textWidth = options.font.widthOfTextAtSize(value, options.size);
+  page.drawText(value, {
+    x: x + (width - textWidth) / 2,
+    y,
+    size: options.size,
+    font: options.font,
+    color: options.color
+  });
+}
+
+function coverPdfText(page, x, y, width, height, color) {
+  page.drawRectangle({ x, y, width, height, color, borderWidth: 0 });
+}
+
+function fitPdfText(text, font, size, maxWidth = Number.POSITIVE_INFINITY) {
+  const normalized = String(text || "").trim();
+  if (!normalized || font.widthOfTextAtSize(normalized, size) <= maxWidth) {
+    return normalized;
+  }
+
+  let next = normalized;
+  while (next.length > 1 && font.widthOfTextAtSize(`${next}...`, size) > maxWidth) {
+    next = next.slice(0, -1);
+  }
+  return `${next}...`;
+}
+
+function chunkRows(rows, size) {
+  const chunks = [];
+  for (let index = 0; index < rows.length; index += size) {
+    chunks.push(rows.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function sumNoteCapacity(lines) {
@@ -2316,14 +2351,30 @@ function formatDateTime(value) {
   return value.replace("T", " ").slice(0, 16);
 }
 
+function formatSaleNoteDateForPdf(value) {
+  if (!value) return "";
+  const [date = "", time = ""] = String(value).split("T");
+  const [year, month, day] = date.split("-");
+  return [day, month, year].every(Boolean) ? `${day}/${month}/${year} ${time.slice(0, 5)}`.trim() : formatDateTime(value);
+}
+
 function moneyInputValue(value) {
   if (value === null || value === undefined || value === "") return 0;
   return Number(value);
 }
 
+function uppercaseCustomerName(value) {
+  return String(value || "").trimStart().toLocaleUpperCase("es-BO");
+}
+
 function money(value) {
   if (value === null || value === undefined || value === "") return "-";
   return Number(value).toLocaleString("es-BO", { style: "currency", currency: "BOB" });
+}
+
+function formatMoneyPlain(value) {
+  if (value === null || value === undefined || value === "") return "0,00";
+  return Number(value).toLocaleString("es-BO", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatNumber(value) {
