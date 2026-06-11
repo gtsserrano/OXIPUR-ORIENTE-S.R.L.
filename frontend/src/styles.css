@@ -26,11 +26,24 @@ body,
   margin: 0;
 }
 
+body {
+  caret-color: transparent;
+  user-select: none;
+}
+
 button,
 input,
 select,
 textarea {
   font: inherit;
+}
+
+input,
+select,
+textarea,
+[contenteditable="true"] {
+  caret-color: auto;
+  user-select: text;
 }
 
 button {
