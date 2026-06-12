@@ -804,3 +804,12 @@ databaseChangeLog:
             sql: UPDATE inventory_movements SET destination_customer_name = UPPER(TRIM(destination_customer_name)) WHERE destination_customer_name IS NOT NULL
         - sql:
             sql: UPDATE sales_note_collected_cylinders SET origin_customer_name = UPPER(TRIM(origin_customer_name)) WHERE origin_customer_name IS NOT NULL
+  - changeSet:
+      id: 022-update-cylinder-owners-from-planilla
+      author: codex
+      changes:
+        - sqlFile:
+            path: 022_update_cylinder_owners_from_planilla.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true

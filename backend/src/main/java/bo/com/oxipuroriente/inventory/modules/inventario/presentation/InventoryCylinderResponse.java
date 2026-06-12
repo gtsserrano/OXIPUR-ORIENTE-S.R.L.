@@ -5,6 +5,7 @@ import java.time.LocalDate;
 
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.Cylinder;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderLocationType;
+import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderOwnerType;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderStatus;
 import bo.com.oxipuroriente.inventory.modules.inventario.domain.InventoryMovement;
 import bo.com.oxipuroriente.inventory.modules.ventas.domain.SalesNote;
@@ -13,6 +14,8 @@ public record InventoryCylinderResponse(
         Long cylinderId,
         String serialNumber,
         BigDecimal capacityM3,
+        String owner,
+        CylinderOwnerType ownerType,
         CylinderStatus status,
         CylinderLocationType currentLocationType,
         String currentCustomerName,
@@ -31,6 +34,8 @@ public record InventoryCylinderResponse(
                 cylinder.getId(),
                 cylinder.getSerialNumber(),
                 cylinder.getCapacityM3(),
+                cylinder.getOwner(),
+                cylinder.getOwnerType(),
                 cylinder.getStatus(),
                 cylinder.getCurrentLocationType(),
                 cylinder.getCurrentCustomerName(),

@@ -51,9 +51,10 @@ button {
 }
 
 .appShell {
-  min-height: 100vh;
+  height: 100vh;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
+  overflow: hidden;
   background:
     radial-gradient(circle at 84% 8%, rgba(17, 166, 200, 0.16), transparent 24rem),
     linear-gradient(120deg, #f8fbfd 0%, #eef6fb 55%, #e8f3f8 100%);
@@ -157,12 +158,36 @@ button {
   position: sticky;
   top: 0;
   height: 100vh;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 30px 16px 22px;
   display: flex;
   flex-direction: column;
   background: linear-gradient(180deg, var(--sidebar), #082b35);
   color: #d8edf4;
   box-shadow: inset -1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(179, 204, 213, 0.42);
+  background-clip: content-box;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(216, 237, 244, 0.56);
+  background-clip: content-box;
 }
 
 .brand {
@@ -345,6 +370,10 @@ button {
 
 .mainPane {
   min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .topbar {
@@ -657,6 +686,7 @@ button {
 }
 
 .field {
+  position: relative;
   display: grid;
   gap: 8px;
   color: #3d4f67;
@@ -676,9 +706,72 @@ button {
   font-size: 15px;
 }
 
+.autocompleteInput {
+  position: relative;
+  min-width: 0;
+}
+
+.autocompleteInput input {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  background: transparent;
+}
+
+.autocompleteGhost {
+  position: absolute;
+  inset: 0;
+  height: 44px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  color: #71849b;
+  font-size: 15px;
+  font-weight: 550;
+  opacity: 0.42;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .field input:disabled {
   color: #93a4b5;
   background: #f2f6f9;
+}
+
+.customerHint {
+  position: absolute;
+  left: 0;
+  top: 24px;
+  z-index: 5;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid;
+  border-radius: 7px;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+  pointer-events: none;
+  transform: translateY(-100%);
+  box-shadow: 0 10px 22px rgba(29, 67, 88, 0.12);
+}
+
+.floatingHintField input {
+  grid-row: 2;
+}
+
+.customerHintWarning {
+  border-color: #f0c766;
+  background: #fff8db;
+  color: #8a5b00;
+}
+
+.customerHintSuccess {
+  border-color: #8fd4a5;
+  background: #e9f9ee;
+  color: #176d36;
 }
 
 .buttonField {
@@ -700,6 +793,23 @@ button {
 .secondaryBtn {
   background: #edf6fa;
   color: #164153;
+}
+
+.addLineBtn {
+  min-height: 42px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 18px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #078db1, #18a957);
+  box-shadow: 0 10px 22px rgba(7, 141, 177, 0.22);
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.addLineBtn:hover {
+  background: linear-gradient(135deg, #067f9f, #14964e);
+  box-shadow: 0 12px 26px rgba(7, 141, 177, 0.28);
 }
 
 .actionBar,
@@ -1142,6 +1252,22 @@ td {
 
 tr:last-child td {
   border-bottom: 0;
+}
+
+.clickableTableRow {
+  cursor: pointer;
+  transition: background 150ms ease, box-shadow 150ms ease;
+}
+
+.clickableTableRow:hover,
+.clickableTableRow:focus-visible {
+  background: #f0f9fc;
+  outline: none;
+  box-shadow: inset 3px 0 0 #0b9fc1;
+}
+
+.clickableTableRow:focus-visible td {
+  border-color: #b9d6e5;
 }
 
 .statusRow {
@@ -1628,12 +1754,22 @@ tr:last-child td {
   }
 
   .appShell {
+    height: auto;
+    min-height: 100vh;
     grid-template-columns: 1fr;
+    overflow: visible;
   }
 
   .sidebar {
     position: static;
     height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .mainPane {
+    height: auto;
+    overflow: visible;
   }
 
   .topbar {

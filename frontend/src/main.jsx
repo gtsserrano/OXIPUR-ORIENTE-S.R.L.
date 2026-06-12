@@ -27,6 +27,7 @@ import {
 import "./styles.css";
 
 const BRAND_NAME = "OXIPUR ORIENTE S.R.L.";
+const BRAND_OWNER_NAME = "OXIPUR";
 const MAIN_WAREHOUSE = "PLANTA";
 const SESSION_KEY = "oxipur_iam_session";
 const LAST_ACTIVITY_KEY = "oxipur_last_activity";
@@ -342,7 +343,7 @@ function App() {
         body: {
           serialNumber: form.serialNumber,
           capacityM3: Number(form.capacityM3),
-          owner: form.owner,
+          owner: uppercaseCustomerName(form.owner),
           price: form.price === "" ? null : Number(form.price),
           ownerType: form.ownerType
         }
@@ -495,7 +496,7 @@ function App() {
           cylinderId: cylinder?.id,
           productId: Number(line.productId),
           capacityM3: line.capacityM3 === "" ? cylinder?.capacityM3 ?? null : Number(line.capacityM3),
-          ownerName: line.ownerName || cylinder?.owner || null,
+          ownerName: line.ownerName || saleCylinderOwnerName(cylinder) || null,
           observations: line.observations || null
         };
       });
@@ -506,7 +507,7 @@ function App() {
           cylinderId: cylinder?.id,
           productId: line.productId ? Number(line.productId) : null,
           capacityM3: line.capacityM3 === "" ? cylinder?.capacityM3 ?? null : Number(line.capacityM3),
-          ownerName: line.ownerName || cylinder?.owner || null,
+          ownerName: line.ownerName || saleCylinderOwnerName(cylinder) || null,
           observations: line.observations || null
         };
       });
@@ -700,6 +701,7 @@ function App() {
         setFilters={setFilters}
         searchInventory={searchInventory}
         inventory={state.inventory}
+        cylinders={state.cylinders}
       />
     ),
     clients: <ClientsView initialInventory={state.inventory} />,
@@ -711,6 +713,7 @@ function App() {
         createSale={createSale}
         cylinders={state.cylinders}
         products={state.products}
+        inventory={state.inventory}
         salesNotes={state.salesNotes}
         editSale={editSale}
         cancelSale={cancelSale}
@@ -727,6 +730,7 @@ function App() {
         createSale={createSale}
         cylinders={state.cylinders}
         products={state.products}
+        inventory={state.inventory}
         salesNotes={state.salesNotes}
         editSale={editSale}
         cancelSale={cancelSale}
@@ -992,8 +996,25 @@ function Dashboard({ metrics, inventory, movements, operationalAlerts, movementD
   );
 }
 
-function InventoryView({ filters, setFilters, searchInventory, inventory }) {
+function InventoryView({ filters, setFilters, searchInventory, inventory, cylinders = [] }) {
   const [selectedCylinder, setSelectedCylinder] = useState(null);
+  const cylinderRegistry = useMemo(() => {
+    const byId = new Map();
+    const bySerial = new Map();
+    (cylinders || []).forEach((cylinder) => {
+      byId.set(String(cylinder.id), cylinder);
+      bySerial.set(normalizeCylinderNumberKey(cylinder.serialNumber), cylinder);
+    });
+    return { byId, bySerial };
+  }, [cylinders]);
+  const enrichedInventory = useMemo(() => (inventory || []).map((item) => {
+    const registered = cylinderRegistry.byId.get(String(item.cylinderId)) || cylinderRegistry.bySerial.get(normalizeCylinderNumberKey(item.serialNumber));
+    return {
+      ...item,
+      owner: item.owner || registered?.owner || "",
+      ownerType: item.ownerType || registered?.ownerType || null
+    };
+  }), [inventory, cylinderRegistry]);
 
   return (
     <>
@@ -1019,14 +1040,14 @@ function InventoryView({ filters, setFilters, searchInventory, inventory }) {
         </div>
       </Card>
       <Card title="Cilindros encontrados">
-        {inventory.length ? (
+        {enrichedInventory.length ? (
           <div className="clientListPanel">
             <div className="clientListHeader">
               <strong>Cilindros</strong>
-              <span>{inventory.length}</span>
+              <span>{enrichedInventory.length}</span>
             </div>
             <div className="clientList">
-              {inventory.map((item) => (
+              {enrichedInventory.map((item) => (
                 <button
                   type="button"
                   key={item.cylinderId}
@@ -1052,6 +1073,7 @@ function InventoryView({ filters, setFilters, searchInventory, inventory }) {
           <div className="detailGrid">
             <div><span>Serie</span><strong>{selectedCylinder.serialNumber}</strong></div>
             <div><span>Capacidad</span><strong>{formatCapacity(selectedCylinder.capacityM3)} m3</strong></div>
+            <div><span>Propietario</span><strong>{selectedCylinder.owner || "-"}</strong></div>
             <div><span>Ubicación actual</span><strong>{selectedCylinder.currentLocationType || "-"}</strong></div>
             <div><span>Cliente actual</span><strong>{selectedCylinder.currentCustomerName || "-"}</strong></div>
             <div><span>Última nota</span><strong>{selectedCylinder.lastDeliveryNoteNumber || "-"}</strong></div>
@@ -1197,11 +1219,59 @@ function ClientsView({ initialInventory = [] }) {
   );
 }
 
-function SalesView({ mode = "create", forms, setForms, createSale, cylinders, products, salesNotes, editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes }) {
+function SalesView({ mode = "create", forms, setForms, createSale, cylinders, products, inventory = [], salesNotes, editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes }) {
   const form = forms.sale;
   const activeCylinders = cylinders.filter((item) => item.active !== false);
   const activeProducts = products.filter((item) => item.active !== false);
   const showingCreation = mode === "create";
+  const existingCustomerNames = useMemo(() => new Set(buildCustomerGroups(inventory).map((client) => normalizeCustomerNameKey(client.name))), [inventory]);
+  const ownerNameSuggestions = useMemo(() => {
+    const suggestions = new Map();
+    const addSuggestion = (name) => {
+      const normalizedName = uppercaseCustomerName(name).trim();
+      const key = normalizeCustomerNameKey(normalizedName);
+      if (key) {
+        suggestions.set(key, normalizedName);
+      }
+    };
+
+    addSuggestion(BRAND_OWNER_NAME);
+    buildCustomerGroups(inventory).forEach((client) => addSuggestion(client.name));
+    (cylinders || []).forEach((cylinder) => addSuggestion(cylinder.owner));
+
+    return Array.from(suggestions.values()).sort((left, right) => left.localeCompare(right, "es-BO"));
+  }, [inventory, cylinders]);
+  const ownerNameSuggestion = (value) => findOwnerNameSuggestion(ownerNameSuggestions, value);
+  const customerNameKey = normalizeCustomerNameKey(form.customerName);
+  const customerExists = customerNameKey ? existingCustomerNames.has(customerNameKey) : false;
+  const existingCylinderNumbers = useMemo(() => new Set((cylinders || []).map((cylinder) => normalizeCylinderNumberKey(cylinder.serialNumber)).filter(Boolean)), [cylinders]);
+  const cylinderHint = (value) => {
+    const cylinderKey = normalizeCylinderNumberKey(value);
+    if (!cylinderKey) return null;
+    const cylinderExists = existingCylinderNumbers.has(cylinderKey);
+    return (
+      <span className={cylinderExists ? "customerHint customerHintSuccess" : "customerHint customerHintWarning"}>
+        {cylinderExists ? "Cilindro ya existe en el apartado Cilindros." : "Cilindro no detectado en el apartado Cilindros."}
+      </span>
+    );
+  };
+  const ownershipHint = (value) => {
+    const ownerNameKey = normalizeCustomerNameKey(value);
+    if (!ownerNameKey) return null;
+    if (ownerNameKey === normalizeCustomerNameKey(BRAND_OWNER_NAME)) {
+      return (
+        <span className="customerHint customerHintSuccess">
+          Propiedad de la empresa.
+        </span>
+      );
+    }
+    const ownerExists = existingCustomerNames.has(ownerNameKey);
+    return (
+      <span className={ownerExists ? "customerHint customerHintSuccess" : "customerHint customerHintWarning"}>
+        {ownerExists ? "Propietario ya existe en el apartado Clientes." : "Propietario no detectado en el apartado Clientes."}
+      </span>
+    );
+  };
   return (
     <>
       <PageIntro
@@ -1217,7 +1287,12 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
               <Field label="Número">
                 <input required disabled={Boolean(form.id)} value={form.noteNumber} onChange={(event) => setNested(setForms, "sale", "noteNumber", event.target.value)} placeholder="NV-001" />
               </Field>
-              <Field label="Cliente">
+              <Field label="Cliente" className="floatingHintField">
+                {customerNameKey && (
+                  <span className={customerExists ? "customerHint customerHintSuccess" : "customerHint customerHintWarning"}>
+                    {customerExists ? "Cliente ya existe en el apartado Clientes." : "Cliente no detectado en el apartado Clientes."}
+                  </span>
+                )}
                 <input required value={form.customerName} onChange={(event) => setNested(setForms, "sale", "customerName", uppercaseCustomerName(event.target.value))} placeholder="Cliente" />
               </Field>
               <Field label="Fecha">
@@ -1240,12 +1315,13 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                     const started = saleLineHasAnyValue(line);
                     return (
                       <div className="lineGrid deliveredLine" key={index}>
-                        <Field label="Nro. cilindro">
-                          <input required={started} type="number" min="1" step="1" value={line.cylinderNumber} onChange={(event) => {
+                        <Field label="Nro. cilindro" className="floatingHintField">
+                          {cylinderHint(line.cylinderNumber)}
+                          <input required={started} value={line.cylinderNumber} onChange={(event) => {
                             const selectedCylinder = findCylinderByNumber(activeCylinders, event.target.value);
                             updateSaleLine(setForms, "deliveredCylinders", index, "cylinderNumber", event.target.value, {
                               capacityM3: selectedCylinder?.capacityM3 ?? "",
-                              ownerName: selectedCylinder?.owner ?? line.ownerName
+                              ownerName: selectedCylinder ? saleCylinderOwnerName(selectedCylinder) : ""
                             });
                           }} placeholder="1001" />
                         </Field>
@@ -1258,8 +1334,15 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                         <Field label="Capacidad (m3)">
                           <input type="number" min="0.01" step="0.01" value={line.capacityM3} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "capacityM3", event.target.value)} placeholder={selected ? String(selected.capacityM3) : "0.00"} />
                         </Field>
-                        <Field label="Propiedad">
-                          <input value={line.ownerName} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "ownerName", event.target.value)} placeholder={selected?.owner || "Dueño del cilindro"} />
+                        <Field label="Propiedad" className="floatingHintField">
+                          {ownershipHint(line.ownerName)}
+                          <AutocompleteInput
+                            value={line.ownerName}
+                            suggestion={ownerNameSuggestion(line.ownerName)}
+                            onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "ownerName", uppercaseCustomerName(event.target.value))}
+                            onSuggestionAccept={(suggestion) => updateSaleLine(setForms, "deliveredCylinders", index, "ownerName", suggestion)}
+                            placeholder={selected ? saleCylinderOwnerName(selected) || "Dueño del cilindro" : "Dueño del cilindro"}
+                          />
                         </Field>
                         <Field label="Observación">
                           <input value={line.observations} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "observations", event.target.value)} />
@@ -1275,12 +1358,13 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                     const started = saleLineHasAnyValue(line);
                     return (
                       <div className="lineGrid collectedLine" key={index}>
-                        <Field label="Nro. cilindro">
-                          <input required={started} type="number" min="1" step="1" value={line.cylinderNumber} onChange={(event) => {
+                        <Field label="Nro. cilindro" className="floatingHintField">
+                          {cylinderHint(line.cylinderNumber)}
+                          <input required={started} value={line.cylinderNumber} onChange={(event) => {
                             const selectedCylinder = findCylinderByNumber(activeCylinders, event.target.value);
                             updateSaleLine(setForms, "collectedCylinders", index, "cylinderNumber", event.target.value, {
                               capacityM3: selectedCylinder?.capacityM3 ?? "",
-                              ownerName: selectedCylinder?.owner ?? line.ownerName
+                              ownerName: selectedCylinder ? saleCylinderOwnerName(selectedCylinder) : ""
                             });
                           }} placeholder="1001" />
                         </Field>
@@ -1293,8 +1377,15 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                         <Field label="Capacidad (m3)">
                           <input type="number" min="0.01" step="0.01" value={line.capacityM3} onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "capacityM3", event.target.value)} placeholder={selected ? String(selected.capacityM3) : "0.00"} />
                         </Field>
-                        <Field label="Propiedad">
-                          <input value={line.ownerName} onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "ownerName", event.target.value)} placeholder={selected?.owner || "Dueño del cilindro"} />
+                        <Field label="Propiedad" className="floatingHintField">
+                          {ownershipHint(line.ownerName)}
+                          <AutocompleteInput
+                            value={line.ownerName}
+                            suggestion={ownerNameSuggestion(line.ownerName)}
+                            onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "ownerName", uppercaseCustomerName(event.target.value))}
+                            onSuggestionAccept={(suggestion) => updateSaleLine(setForms, "collectedCylinders", index, "ownerName", suggestion)}
+                            placeholder={selected ? saleCylinderOwnerName(selected) || "Dueño del cilindro" : "Dueño del cilindro"}
+                          />
                         </Field>
                         <Field label="Observación">
                           <input value={line.observations} onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "observations", event.target.value)} />
@@ -1557,7 +1648,7 @@ function CylindersView({ forms, setForms, createCylinder, cylinders, editCylinde
               <input required type="number" min="0.01" step="0.01" value={form.capacityM3} onChange={(event) => setNested(setForms, "cylinder", "capacityM3", event.target.value)} placeholder="6.00" />
             </Field>
             <Field label="Propietario">
-              <input required value={form.owner} onChange={(event) => setNested(setForms, "cylinder", "owner", event.target.value)} />
+              <input required value={form.owner} onChange={(event) => setNested(setForms, "cylinder", "owner", uppercaseCustomerName(event.target.value))} />
             </Field>
             <Field label="Valor interno">
               <input type="number" min="0" step="0.01" value={form.price} onChange={(event) => setNested(setForms, "cylinder", "price", event.target.value)} placeholder="Opcional" />
@@ -1571,19 +1662,20 @@ function CylindersView({ forms, setForms, createCylinder, cylinders, editCylinde
       </Card>
       <Card title="Cilindros registrados">
         <DataTable
-          columns={["Serie", "m3", "Estado", "Ubicación", "Cliente", "Valor", "Acciones"]}
+          columns={["Serie", "m3", "Propietario", "Estado", "Ubicación", "Cliente actual", "Valor", "Acciones"]}
           rows={cylinders.map((item) => [
             item.serialNumber,
             item.capacityM3,
+            item.owner,
             item.status,
             item.currentLocationType || "-",
             item.currentCustomerName || "-",
             money(item.price),
             <div className="rowActions">
-              <IconButton title="Editar cilindro" onClick={() => editCylinder(item)} icon={Edit3} />
               <IconButton title="Eliminar cilindro" onClick={() => deleteCylinder(item)} icon={Trash2} />
             </div>
           ])}
+          onRowClick={(index) => editCylinder(cylinders[index])}
           empty="Sin cilindros registrados"
         />
       </Card>
@@ -1770,12 +1862,35 @@ function Card({ title, children }) {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, children, className = "" }) {
   return (
-    <label className="field">
+    <label className={`field ${className}`.trim()}>
       <span>{label}</span>
       {children}
     </label>
+  );
+}
+
+function AutocompleteInput({ value, suggestion, onChange, onSuggestionAccept, placeholder }) {
+  const handleKeyDown = (event) => {
+    if (!suggestion || !onSuggestionAccept) return;
+    if (event.key === "Tab" || event.key === "ArrowRight") {
+      event.preventDefault();
+      onSuggestionAccept(suggestion);
+    }
+  };
+
+  return (
+    <div className="autocompleteInput">
+      {suggestion && <span className="autocompleteGhost">{suggestion}</span>}
+      <input
+        value={value}
+        onChange={onChange}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        autoComplete="off"
+      />
+    </div>
   );
 }
 
@@ -1795,7 +1910,7 @@ function LineSection({ title, icon: Icon, lines, onAdd, children }) {
     <div className="lineSection">
       <div className="lineSectionHead">
         <PanelTitle icon={Icon} title={title} />
-        <button type="button" className="secondaryBtn iconTextBtn" onClick={onAdd}><Plus size={16} /> Agregar</button>
+        <button type="button" className="addLineBtn iconTextBtn" onClick={onAdd}><Plus size={16} /> Agregar</button>
       </div>
       <div className="lineList">
         {visibleLines.map((line, index) => children(line, index))}
@@ -1806,7 +1921,10 @@ function LineSection({ title, icon: Icon, lines, onAdd, children }) {
 
 function IconButton({ title, onClick, icon: Icon, disabled = false }) {
   return (
-    <button type="button" className="iconBtn" title={title} onClick={onClick} disabled={disabled}>
+    <button type="button" className="iconBtn" title={title} onClick={(event) => {
+      event.stopPropagation();
+      onClick?.(event);
+    }} disabled={disabled}>
       <Icon size={16} />
     </button>
   );
@@ -1852,10 +1970,26 @@ function DetailModal({ eyebrow, title, children, onClose }) {
   );
 }
 
-function DataTable({ columns, rows, empty }) {
+function DataTable({ columns, rows, empty, onRowClick }) {
   if (!rows.length) {
     return <EmptyState title="Sin registros" text={empty} />;
   }
+  const rowProps = (index) => {
+    if (!onRowClick) return {};
+    return {
+      className: "clickableTableRow",
+      role: "button",
+      tabIndex: 0,
+      onClick: () => onRowClick(index),
+      onKeyDown: (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onRowClick(index);
+        }
+      }
+    };
+  };
+
   return (
     <div className="tableWrap">
       <table>
@@ -1864,7 +1998,7 @@ function DataTable({ columns, rows, empty }) {
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr key={index}>
+            <tr key={index} {...rowProps(index)}>
               {row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}
             </tr>
           ))}
@@ -2001,7 +2135,7 @@ function previewDeliveredLines(lines, cylinders, products) {
         serialNumber: line.cylinderNumber || cylinder?.serialNumber || "",
         productName: product?.name || "",
         capacityM3: Number(line.capacityM3 || cylinder?.capacityM3 || 0),
-        ownerName: line.ownerName || cylinder?.owner || "",
+        ownerName: line.ownerName || saleCylinderOwnerName(cylinder) || "",
         observations: line.observations
       };
     })
@@ -2017,7 +2151,7 @@ function previewCollectedLines(lines, cylinders, products) {
         serialNumber: line.cylinderNumber || cylinder?.serialNumber || "",
         productName: product?.name || "",
         capacityM3: Number(line.capacityM3 || cylinder?.capacityM3 || 0),
-        ownerName: line.ownerName || cylinder?.owner || "",
+        ownerName: line.ownerName || saleCylinderOwnerName(cylinder) || "",
         observations: line.observations
       };
     })
@@ -2029,9 +2163,24 @@ function findById(items, id) {
 }
 
 function findCylinderByNumber(items, number) {
-  const normalized = String(number || "").trim();
+  const normalized = normalizeCylinderNumberKey(number);
   if (!normalized) return undefined;
-  return items.find((item) => String(item.serialNumber).trim() === normalized || String(item.id) === normalized);
+  return items.find((item) => normalizeCylinderNumberKey(item.serialNumber) === normalized || String(item.id) === normalized);
+}
+
+function saleCylinderOwnerName(cylinder) {
+  return uppercaseCustomerName(cylinder?.owner || "");
+}
+
+function findOwnerNameSuggestion(suggestions, value) {
+  const currentValue = uppercaseCustomerName(value).trim();
+  const currentKey = normalizeCustomerNameKey(currentValue);
+  if (!currentKey) return "";
+
+  return suggestions.find((name) => {
+    const suggestionKey = normalizeCustomerNameKey(name);
+    return suggestionKey.startsWith(currentKey) && suggestionKey !== currentKey;
+  }) || "";
 }
 
 function sameText(left, right) {
@@ -2045,8 +2194,9 @@ function sumCapacity(lines) {
 function inventoryCylinderSubtitle(item) {
   const location = item.currentLocationType || "Sin ubicación";
   const customer = item.currentCustomerName ? `Cliente: ${item.currentCustomerName}` : "Sin cliente";
+  const owner = item.owner ? `Propietario: ${item.owner}` : "Sin propietario";
   const note = item.lastDeliveryNoteNumber ? `Nota: ${item.lastDeliveryNoteNumber}` : "Sin nota";
-  return `${location} · ${customer} · ${note}`;
+  return `${location} · ${customer} · ${owner} · ${note}`;
 }
 
 function buildCustomerGroups(inventory) {
@@ -2365,6 +2515,14 @@ function moneyInputValue(value) {
 
 function uppercaseCustomerName(value) {
   return String(value || "").trimStart().toLocaleUpperCase("es-BO");
+}
+
+function normalizeCustomerNameKey(value) {
+  return uppercaseCustomerName(value).trim().toLocaleLowerCase("es-BO");
+}
+
+function normalizeCylinderNumberKey(value) {
+  return String(value || "").trim().toLocaleUpperCase("es-BO");
 }
 
 function money(value) {
