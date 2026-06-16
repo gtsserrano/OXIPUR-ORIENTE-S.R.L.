@@ -36,6 +36,7 @@ const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000;
 const PRESENCE_HEARTBEAT_MS = 30000;
 const PROFILE_REFRESH_MS = 30000;
 const PROFILE_EDITOR_CLOSE_MS = 180;
+const CYLINDER_EDITOR_CLOSE_MS = 180;
 const DETAIL_MODAL_CLOSE_MS = 180;
 const SALE_NOTE_TEMPLATE_URL = "/formato-nota-entrega.pdf";
 const SALE_NOTE_TEMPLATE_PAGE_INDEX = 1;
@@ -90,6 +91,14 @@ const emptyForm = {
     price: "",
     ownerType: "COMPANY"
   },
+  cylinderEditor: {
+    id: null,
+    serialNumber: "",
+    capacityM3: "",
+    owner: "OXIPUR",
+    price: "",
+    ownerType: "COMPANY"
+  },
   product: { id: null, code: "", name: "", description: "" },
   profile: { id: null, fullName: "", username: "", password: "", roleName: "OPERADOR", active: true },
   profileEditor: { id: null, fullName: "", username: "", password: "", roleName: "OPERADOR", active: true },
@@ -129,6 +138,7 @@ function App() {
   const [filters, setFilters] = useState({ locationType: "", customerName: "", serialNumber: "" });
   const [forms, setForms] = useState(emptyForm);
   const [profileEditorClosing, setProfileEditorClosing] = useState(false);
+  const [cylinderEditorClosing, setCylinderEditorClosing] = useState(false);
   const [salesDateFilter, setSalesDateFilter] = useState(createDateFilter());
   const [movementDateFilter, setMovementDateFilter] = useState(createDateFilter());
   const [utilityDateFilter, setUtilityDateFilter] = useState(createDateFilter());
@@ -338,8 +348,8 @@ function App() {
     event.preventDefault();
     const form = forms.cylinder;
     await runAction(async () => {
-      await api(form.id ? `/api/cylinders/${form.id}` : "/api/cylinders", {
-        method: form.id ? "PATCH" : "POST",
+      await api("/api/cylinders", {
+        method: "POST",
         body: {
           serialNumber: form.serialNumber,
           capacityM3: Number(form.capacityM3),
@@ -350,7 +360,27 @@ function App() {
       });
       setForms((value) => ({ ...value, cylinder: { ...emptyForm.cylinder } }));
       await loadAll();
-      notify(form.id ? "Cilindro actualizado correctamente." : "Cilindro creado correctamente.");
+      notify("Cilindro creado correctamente.");
+    });
+  }
+
+  async function updateCylinder(event) {
+    event.preventDefault();
+    const form = forms.cylinderEditor;
+    await runAction(async () => {
+      await api(`/api/cylinders/${form.id}`, {
+        method: "PATCH",
+        body: {
+          serialNumber: form.serialNumber,
+          capacityM3: Number(form.capacityM3),
+          owner: uppercaseCustomerName(form.owner),
+          price: form.price === "" ? null : Number(form.price),
+          ownerType: form.ownerType
+        }
+      });
+      await loadAll();
+      notify("Cilindro actualizado correctamente.");
+      closeCylinderEditor();
     });
   }
 
@@ -595,9 +625,10 @@ function App() {
   }
 
   function editCylinder(cylinder) {
+    setCylinderEditorClosing(false);
     setForms((value) => ({
       ...value,
-      cylinder: {
+      cylinderEditor: {
         id: cylinder.id,
         serialNumber: cylinder.serialNumber,
         capacityM3: cylinder.capacityM3,
@@ -606,6 +637,15 @@ function App() {
         ownerType: cylinder.ownerType
       }
     }));
+  }
+
+  function closeCylinderEditor() {
+    if (!forms.cylinderEditor.id || cylinderEditorClosing) return;
+    setCylinderEditorClosing(true);
+    window.setTimeout(() => {
+      setForms((value) => ({ ...value, cylinderEditor: { ...emptyForm.cylinderEditor } }));
+      setCylinderEditorClosing(false);
+    }, CYLINDER_EDITOR_CLOSE_MS);
   }
 
   function editProfile(profile) {
@@ -749,7 +789,7 @@ function App() {
         loadUtilities={loadUtilities}
       />
     ),
-    cylinders: <CylindersView forms={forms} setForms={setForms} createCylinder={createCylinder} cylinders={state.cylinders} editCylinder={editCylinder} deleteCylinder={deleteCylinder} />,
+    cylinders: <CylindersView forms={forms} setForms={setForms} createCylinder={createCylinder} updateCylinder={updateCylinder} cylinders={state.cylinders} editCylinder={editCylinder} closeCylinderEditor={closeCylinderEditor} cylinderEditorClosing={cylinderEditorClosing} deleteCylinder={deleteCylinder} />,
     products: <ProductsView forms={forms} setForms={setForms} createProduct={createProduct} products={state.products} editProduct={editProduct} deleteProduct={deleteProduct} />,
     profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} updateProfile={updateProfile} profiles={state.profiles} loadProfiles={loadProfiles} editProfile={editProfile} closeProfileEditor={closeProfileEditor} profileEditorClosing={profileEditorClosing} deleteProfile={deleteProfile} />,
     printing: <PrintingView salesNotes={state.salesNotes} selectedPrintNoteId={selectedPrintNoteId} setSelectedPrintNoteId={setSelectedPrintNoteId} printSaleNote={printSaleNote} />,
@@ -1633,8 +1673,28 @@ function DatePeriodFilter({ value, onChange, onApply, onClear }) {
   );
 }
 
-function CylindersView({ forms, setForms, createCylinder, cylinders, editCylinder, deleteCylinder }) {
+function CylinderFields({ form, group, setForms }) {
+  return (
+    <div className="formGrid four">
+      <Field label="Serie">
+        <input required value={form.serialNumber} onChange={(event) => setNested(setForms, group, "serialNumber", event.target.value)} placeholder="CYL-001" />
+      </Field>
+      <Field label="Capacidad m3">
+        <input required type="number" min="0.01" step="0.01" value={form.capacityM3} onChange={(event) => setNested(setForms, group, "capacityM3", event.target.value)} placeholder="6.00" />
+      </Field>
+      <Field label="Propietario">
+        <input required value={form.owner} onChange={(event) => setNested(setForms, group, "owner", uppercaseCustomerName(event.target.value))} />
+      </Field>
+      <Field label="Valor interno">
+        <input type="number" min="0" step="0.01" value={form.price} onChange={(event) => setNested(setForms, group, "price", event.target.value)} placeholder="Opcional" />
+      </Field>
+    </div>
+  );
+}
+
+function CylindersView({ forms, setForms, createCylinder, updateCylinder, cylinders, editCylinder, closeCylinderEditor, cylinderEditorClosing, deleteCylinder }) {
   const form = forms.cylinder;
+  const editor = forms.cylinderEditor;
   return (
     <>
       <PageIntro eyebrow="CILINDROS" title="Cilindros" subtitle="Registra cilindros físicos y consulta su ubicación actual." />
@@ -1655,8 +1715,7 @@ function CylindersView({ forms, setForms, createCylinder, cylinders, editCylinde
             </Field>
           </div>
           <div className="actionBar">
-            <button className="primaryBtn">{form.id ? "Guardar cilindro" : "Crear cilindro"}</button>
-            {form.id && <button type="button" className="secondaryBtn" onClick={() => setForms((value) => ({ ...value, cylinder: { ...emptyForm.cylinder } }))}>Cancelar edición</button>}
+            <button className="primaryBtn">Crear cilindro</button>
           </div>
         </form>
       </Card>
@@ -1672,6 +1731,7 @@ function CylindersView({ forms, setForms, createCylinder, cylinders, editCylinde
             item.currentCustomerName || "-",
             money(item.price),
             <div className="rowActions">
+              <IconButton title="Editar cilindro" onClick={() => editCylinder(item)} icon={Edit3} />
               <IconButton title="Eliminar cilindro" onClick={() => deleteCylinder(item)} icon={Trash2} />
             </div>
           ])}
@@ -1679,6 +1739,26 @@ function CylindersView({ forms, setForms, createCylinder, cylinders, editCylinde
           empty="Sin cilindros registrados"
         />
       </Card>
+      {editor.id && (
+        <div className={`modalOverlay ${cylinderEditorClosing ? "closing" : "open"}`} onMouseDown={closeCylinderEditor}>
+          <section className="cylinderEditModal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modalHeader">
+              <div>
+                <span>CILINDRO</span>
+                <h3>Editar cilindro {editor.serialNumber}</h3>
+              </div>
+              <IconButton title="Cerrar" onClick={closeCylinderEditor} icon={X} />
+            </div>
+            <form onSubmit={updateCylinder}>
+              <CylinderFields form={editor} group="cylinderEditor" setForms={setForms} />
+              <div className="actionBar modalActions">
+                <button className="primaryBtn">Guardar cambios</button>
+                <button type="button" className="secondaryBtn" onClick={closeCylinderEditor}>Cancelar</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </>
   );
 }

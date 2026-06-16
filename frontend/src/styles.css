@@ -842,8 +842,11 @@ button {
   animation: modalOverlayOut 180ms ease both;
 }
 
-.profileEditModal {
+.profileEditModal,
+.cylinderEditModal {
   width: min(100%, 680px);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 24px;
@@ -865,6 +868,7 @@ button {
 }
 
 .modalOverlay.closing .profileEditModal,
+.modalOverlay.closing .cylinderEditModal,
 .modalOverlay.closing .detailModal {
   animation: modalPanelOut 180ms ease both;
 }
