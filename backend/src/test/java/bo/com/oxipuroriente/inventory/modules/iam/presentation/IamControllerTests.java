@@ -13,6 +13,9 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import bo.com.oxipuroriente.inventory.modules.iam.application.PasswordService;
+import bo.com.oxipuroriente.inventory.modules.perfiles.domain.UserProfile;
+import bo.com.oxipuroriente.inventory.modules.perfiles.infrastructure.UserProfileRepository;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -25,6 +28,12 @@ class IamControllerTests {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private UserProfileRepository userProfileRepository;
+
+    @Autowired
+    private PasswordService passwordService;
 
     @Test
     void logsInWithValidProfileCredentials() throws Exception {
@@ -46,6 +55,7 @@ class IamControllerTests {
 
         assertThat(response.get("accessToken").asText()).isNotBlank();
         assertThat(response.get("tokenType").asText()).isEqualTo("Bearer");
+        assertThat(response.get("expiresAt").asText()).isNotBlank();
         assertThat(response.get("profile").get("username").asText()).isEqualTo(username);
         assertThat(response.get("profile").get("online").asBoolean()).isTrue();
     }
@@ -66,17 +76,13 @@ class IamControllerTests {
                 .andExpect(status().isUnauthorized());
     }
 
-    private void createProfile(String username, String password) throws Exception {
-        mockMvc.perform(post("/api/profiles")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "fullName": "Perfil %s",
-                                  "roleName": "OPERADOR",
-                                  "username": "%s",
-                                  "password": "%s"
-                                }
-                                """.formatted(username, username, password)))
-                .andExpect(status().isCreated());
+    private void createProfile(String username, String password) {
+        UserProfile profile = new UserProfile();
+        profile.setFullName("Perfil " + username);
+        profile.setRoleName("OPERADOR");
+        profile.setUsername(username);
+        profile.setPasswordHash(passwordService.encode(password));
+        profile.setActive(true);
+        userProfileRepository.save(profile);
     }
 }

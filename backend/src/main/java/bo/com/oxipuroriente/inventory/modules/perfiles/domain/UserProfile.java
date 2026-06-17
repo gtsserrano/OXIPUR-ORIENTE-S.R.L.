@@ -28,7 +28,7 @@ public class UserProfile {
     @Column(length = 80)
     private String username;
 
-    @Column(name = "password_hash", length = 64)
+    @Column(name = "password_hash", length = 128)
     private String passwordHash;
 
     @Column(nullable = false)

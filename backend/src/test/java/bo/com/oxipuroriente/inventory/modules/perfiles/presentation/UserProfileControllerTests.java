@@ -22,7 +22,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters = false)
 class UserProfileControllerTests {
 
     @Autowired
@@ -130,7 +130,8 @@ class UserProfileControllerTests {
                         .content("""
                                 {
                                   "fullName": "%s",
-                                  "roleName": "OPERADOR"
+                                  "roleName": "OPERADOR",
+                                  "password": "Clave123"
                                 }
                                 """.formatted(fullName)))
                 .andExpect(status().isConflict());
@@ -142,7 +143,8 @@ class UserProfileControllerTests {
                         .content("""
                                 {
                                   "fullName": "%s",
-                                  "roleName": "%s"
+                                  "roleName": "%s",
+                                  "password": "Clave123"
                                 }
                                 """.formatted(fullName, roleName)))
                 .andExpect(status().isCreated())

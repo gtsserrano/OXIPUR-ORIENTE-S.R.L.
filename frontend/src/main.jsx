@@ -63,6 +63,28 @@ const navItems = [
   { id: "profile", label: "Perfil", icon: UserRound }
 ];
 
+const PERMISSIONS = {
+  MANAGE_CATALOGS: "MANAGE_CATALOGS",
+  MANAGE_PROFILES: "MANAGE_PROFILES",
+  VIEW_UTILITIES: "VIEW_UTILITIES"
+};
+
+const ROLE_PERMISSIONS = {
+  ADMINISTRADOR: new Set([
+    PERMISSIONS.MANAGE_CATALOGS,
+    PERMISSIONS.MANAGE_PROFILES,
+    PERMISSIONS.VIEW_UTILITIES
+  ]),
+  OPERADOR: new Set()
+};
+
+const PAGE_PERMISSIONS = {
+  utilities: PERMISSIONS.VIEW_UTILITIES,
+  cylinders: PERMISSIONS.MANAGE_CATALOGS,
+  products: PERMISSIONS.MANAGE_CATALOGS,
+  profiles: PERMISSIONS.MANAGE_PROFILES
+};
+
 const monthOptions = [
   { value: 1, label: "Enero" },
   { value: 2, label: "Febrero" },
@@ -143,19 +165,22 @@ function App() {
   const [movementDateFilter, setMovementDateFilter] = useState(createDateFilter());
   const [utilityDateFilter, setUtilityDateFilter] = useState(createDateFilter());
   const [selectedPrintNoteId, setSelectedPrintNoteId] = useState("");
+  const visibleNavItems = useMemo(() => filterNavItemsForSession(navItems, session), [session?.profile?.roleName]);
 
   async function loadAll() {
     setState((value) => ({ ...value, loading: true }));
     try {
-      const [cylinders, products, profiles, inventory, movements, salesNotes, operationalAlerts, utilitiesSummary] = await Promise.all([
+      const canManageProfiles = hasPermission(session, PERMISSIONS.MANAGE_PROFILES);
+      const canViewUtilities = hasPermission(session, PERMISSIONS.VIEW_UTILITIES);
+      const [cylinders, products, inventory, movements, salesNotes, operationalAlerts, profiles, utilitiesSummary] = await Promise.all([
         api("/api/cylinders"),
         api("/api/products"),
-        api("/api/profiles"),
         api("/api/inventory/cylinders"),
         api("/api/inventory-movements"),
         api("/api/sales-notes"),
         api("/api/operational-alerts"),
-        api("/api/utilities/summary")
+        canManageProfiles ? api("/api/profiles") : Promise.resolve([]),
+        canViewUtilities ? api("/api/utilities/summary") : Promise.resolve(null)
       ]);
       setState((value) => ({
         ...value,
@@ -240,6 +265,7 @@ function App() {
   useEffect(() => {
     if (!session?.profile?.id) return undefined;
     let cancelled = false;
+    const canManageProfiles = hasPermission(session, PERMISSIONS.MANAGE_PROFILES);
 
     async function markCurrentProfileActive(refreshProfiles = false) {
       try {
@@ -255,7 +281,7 @@ function App() {
           ...value,
           profiles: value.profiles.map((profile) => (profile.id === updated.id ? updated : profile))
         }));
-        if (refreshProfiles) {
+        if (refreshProfiles && canManageProfiles) {
           const profiles = await api("/api/profiles");
           if (!cancelled) {
             setState((value) => ({ ...value, profiles }));
@@ -267,6 +293,7 @@ function App() {
     }
 
     async function refreshProfilePresence() {
+      if (!canManageProfiles) return;
       try {
         const profiles = await api("/api/profiles");
         if (!cancelled) {
@@ -279,7 +306,7 @@ function App() {
 
     markCurrentProfileActive(true);
     const heartbeat = window.setInterval(() => markCurrentProfileActive(false), PRESENCE_HEARTBEAT_MS);
-    const profileRefresh = window.setInterval(refreshProfilePresence, PROFILE_REFRESH_MS);
+    const profileRefresh = canManageProfiles ? window.setInterval(refreshProfilePresence, PROFILE_REFRESH_MS) : null;
     const handleFocus = () => markCurrentProfileActive(true);
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -292,11 +319,13 @@ function App() {
     return () => {
       cancelled = true;
       window.clearInterval(heartbeat);
-      window.clearInterval(profileRefresh);
+      if (profileRefresh) {
+        window.clearInterval(profileRefresh);
+      }
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [session?.profile?.id]);
+  }, [session?.profile?.id, session?.profile?.roleName]);
 
   useEffect(() => {
     if (!welcomeVisible) return undefined;
@@ -335,6 +364,10 @@ function App() {
   }
 
   async function loadUtilities(nextFilter = utilityDateFilter) {
+    if (!hasPermission(session, PERMISSIONS.VIEW_UTILITIES)) {
+      setState((value) => ({ ...value, utilitiesError: "No tienes permiso para ver utilidades." }));
+      return;
+    }
     setState((value) => ({ ...value, utilitiesLoading: true, utilitiesError: "" }));
     try {
       const utilitiesSummary = await api(`/api/utilities/summary${buildDateQuery(nextFilter)}`);
@@ -481,6 +514,7 @@ function App() {
   }
 
   async function loadProfiles() {
+    if (!hasPermission(session, PERMISSIONS.MANAGE_PROFILES)) return;
     const profiles = await api("/api/profiles");
     setState((value) => ({ ...value, profiles }));
   }
@@ -722,7 +756,8 @@ function App() {
     return <WelcomeScreen name={session?.profile?.fullName || session?.profile?.username || "usuario"} />;
   }
 
-  const pageKey = active === "sales" ? "sales-create" : active;
+  const requestedPageKey = active === "sales" ? "sales-create" : active;
+  const pageKey = canAccessPage(session, requestedPageKey) ? requestedPageKey : "dashboard";
   const page = {
     dashboard: (
       <Dashboard
@@ -793,14 +828,14 @@ function App() {
     products: <ProductsView forms={forms} setForms={setForms} createProduct={createProduct} products={state.products} editProduct={editProduct} deleteProduct={deleteProduct} />,
     profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} updateProfile={updateProfile} profiles={state.profiles} loadProfiles={loadProfiles} editProfile={editProfile} closeProfileEditor={closeProfileEditor} profileEditorClosing={profileEditorClosing} deleteProfile={deleteProfile} />,
     printing: <PrintingView salesNotes={state.salesNotes} selectedPrintNoteId={selectedPrintNoteId} setSelectedPrintNoteId={setSelectedPrintNoteId} printSaleNote={printSaleNote} />,
-    profile: <ProfileView />
+    profile: <ProfileView session={session} />
   }[pageKey];
 
-  const activeMeta = findNavItem(navItems, pageKey) || navItems[0];
+  const activeMeta = findNavItem(visibleNavItems, pageKey) || visibleNavItems[0] || navItems[0];
 
   return (
     <div className="appShell">
-      <Sidebar active={pageKey} setActive={setActive} />
+      <Sidebar active={pageKey} setActive={setActive} navItems={visibleNavItems} />
       <main className="mainPane">
         <Topbar title={activeMeta.label} session={session} onLogout={logout} />
         <section className="workspace">
@@ -812,7 +847,7 @@ function App() {
   );
 }
 
-function Sidebar({ active, setActive }) {
+function Sidebar({ active, setActive, navItems }) {
   const [expandedGroups, setExpandedGroups] = useState({});
 
   useEffect(() => {
@@ -904,6 +939,32 @@ function findNavParent(items, id) {
   return items.find((item) => item.children?.some((child) => child.id === id)) || null;
 }
 
+function filterNavItemsForSession(items, session) {
+  return items
+    .map((item) => {
+      if (!canAccessPage(session, item.id)) return null;
+      if (!item.children?.length) return item;
+      const children = item.children.filter((child) => canAccessPage(session, child.id));
+      return children.length ? { ...item, children } : null;
+    })
+    .filter(Boolean);
+}
+
+function canAccessPage(session, pageId) {
+  const permission = PAGE_PERMISSIONS[pageId];
+  return !permission || hasPermission(session, permission);
+}
+
+function hasPermission(session, permission) {
+  const role = normalizeRoleName(session?.profile?.roleName);
+  return Boolean(role && ROLE_PERMISSIONS[role]?.has(permission));
+}
+
+function normalizeRoleName(roleName) {
+  const normalized = String(roleName || "").trim().toUpperCase();
+  return normalized === "ADMIN" ? "ADMINISTRADOR" : normalized;
+}
+
 function Topbar({ title, session, onLogout }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const profile = session?.profile;
@@ -936,7 +997,7 @@ function Topbar({ title, session, onLogout }) {
             </div>
             <div className="profilePopoverGrid">
               <span>Rol</span>
-              <strong>{profile?.roleName || "IAM"}</strong>
+              <strong>{normalizeRoleName(profile?.roleName) || "IAM"}</strong>
               <span>Usuario</span>
               <strong>{profile?.username || "-"}</strong>
               <span>Empresa</span>
@@ -1897,14 +1958,16 @@ function ProfilesView({ forms, setForms, createProfile, updateProfile, profiles,
   );
 }
 
-function ProfileView() {
+function ProfileView({ session }) {
+  const profile = session?.profile;
   return (
     <>
       <PageIntro eyebrow="SESIÓN" title="Perfil" subtitle="Datos de trabajo para el MVP local." />
       <Card title="Contexto operativo">
         <div className="profileGrid">
           <div><span>Empresa</span><strong>{BRAND_NAME}</strong></div>
-          <div><span>Rol</span><strong>ADMIN</strong></div>
+          <div><span>Rol</span><strong>{normalizeRoleName(profile?.roleName) || "-"}</strong></div>
+          <div><span>Usuario</span><strong>{profile?.username || "-"}</strong></div>
           <div><span>Almacén</span><strong>{MAIN_WAREHOUSE}</strong></div>
           <div><span>API</span><strong>/api</strong></div>
         </div>
@@ -2526,7 +2589,7 @@ async function api(path, options = {}) {
   const session = readStoredSession();
   const headers = options.body ? { "Content-Type": "application/json" } : {};
   if (session?.accessToken) {
-    headers.Authorization = `${session.tokenType || "Bearer"} ${session.accessToken}`;
+    headers.Authorization = `Bearer ${session.accessToken}`;
   }
   const response = await fetch(path, {
     method: options.method || "GET",
@@ -2551,10 +2614,24 @@ async function api(path, options = {}) {
 function readStoredSession() {
   try {
     const stored = localStorage.getItem(SESSION_KEY);
-    return stored ? JSON.parse(stored) : null;
+    const session = stored ? JSON.parse(stored) : null;
+    if (!isStoredSessionValid(session)) {
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(LAST_ACTIVITY_KEY);
+      return null;
+    }
+    return session;
   } catch {
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(LAST_ACTIVITY_KEY);
     return null;
   }
+}
+
+function isStoredSessionValid(session) {
+  if (!session?.accessToken || !session?.profile) return false;
+  if (!session.expiresAt) return true;
+  return new Date(session.expiresAt).getTime() > Date.now();
 }
 
 function readLastActivityAt() {
@@ -2563,6 +2640,8 @@ function readLastActivityAt() {
 }
 
 function readErrorMessage(text, status) {
+  if (status === 401) return "Sesion expirada o no autenticada. Ingresa nuevamente.";
+  if (status === 403) return "No tienes permiso para realizar esta accion.";
   if (!text) return `Error ${status}`;
   try {
     const parsed = JSON.parse(text);

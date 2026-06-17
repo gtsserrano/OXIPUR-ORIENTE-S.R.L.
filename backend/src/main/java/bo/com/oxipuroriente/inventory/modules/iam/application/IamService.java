@@ -1,14 +1,13 @@
 package bo.com.oxipuroriente.inventory.modules.iam.application;
 
 import java.time.Instant;
-import java.util.UUID;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import bo.com.oxipuroriente.inventory.modules.iam.presentation.IamLoginRequest;
 import bo.com.oxipuroriente.inventory.modules.iam.presentation.IamLoginResponse;
-import bo.com.oxipuroriente.inventory.modules.perfiles.application.UserProfileService;
+import bo.com.oxipuroriente.inventory.modules.iam.security.JwtTokenService;
+import bo.com.oxipuroriente.inventory.modules.iam.security.JwtTokenService.IssuedJwt;
 import bo.com.oxipuroriente.inventory.modules.perfiles.domain.UserProfile;
 import bo.com.oxipuroriente.inventory.modules.perfiles.infrastructure.UserProfileRepository;
 import bo.com.oxipuroriente.inventory.modules.perfiles.presentation.UserProfileResponse;
@@ -17,11 +16,16 @@ import bo.com.oxipuroriente.inventory.modules.perfiles.presentation.UserProfileR
 public class IamService {
 
     private final UserProfileRepository repository;
-    private final UserProfileService profileService;
+    private final PasswordService passwordService;
+    private final JwtTokenService jwtTokenService;
 
-    public IamService(UserProfileRepository repository, UserProfileService profileService) {
+    public IamService(
+            UserProfileRepository repository,
+            PasswordService passwordService,
+            JwtTokenService jwtTokenService) {
         this.repository = repository;
-        this.profileService = profileService;
+        this.passwordService = passwordService;
+        this.jwtTokenService = jwtTokenService;
     }
 
     @Transactional
@@ -31,19 +35,23 @@ public class IamService {
         if (!profile.isActive() || profile.getPasswordHash() == null) {
             throw new IamAuthenticationException();
         }
-        String passwordHash = profileService.hashPassword(request.password());
-        if (!profile.getPasswordHash().equals(passwordHash)) {
+        if (!passwordService.matches(request.password(), profile.getPasswordHash())) {
             throw new IamAuthenticationException();
         }
 
         Instant now = Instant.now();
         profile.setLastActivityAt(now);
         profile.setOnlineUntil(now.plusSeconds(300));
+        if (passwordService.requiresUpgrade(profile.getPasswordHash())) {
+            profile.setPasswordHash(passwordService.encode(request.password()));
+        }
         UserProfile saved = repository.save(profile);
+        IssuedJwt issuedJwt = jwtTokenService.createToken(saved);
 
         return new IamLoginResponse(
-                UUID.randomUUID().toString(),
+                issuedJwt.token(),
                 "Bearer",
+                issuedJwt.expiresAt(),
                 UserProfileResponse.from(saved, now));
     }
 }

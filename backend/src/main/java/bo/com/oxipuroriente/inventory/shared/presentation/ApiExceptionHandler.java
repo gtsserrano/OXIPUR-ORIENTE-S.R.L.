@@ -14,11 +14,14 @@ import bo.com.oxipuroriente.inventory.modules.almacenes.application.WarehouseNot
 import bo.com.oxipuroriente.inventory.modules.cilindros.application.CylinderNotFoundException;
 import bo.com.oxipuroriente.inventory.modules.cilindros.application.DuplicateCylinderSerialNumberException;
 import bo.com.oxipuroriente.inventory.modules.iam.application.IamAuthenticationException;
+import bo.com.oxipuroriente.inventory.modules.iam.application.InvalidUserRoleException;
 import bo.com.oxipuroriente.inventory.modules.perfiles.application.DuplicateUserProfileException;
+import bo.com.oxipuroriente.inventory.modules.perfiles.application.InvalidUserProfileException;
 import bo.com.oxipuroriente.inventory.modules.perfiles.application.UserProfileNotFoundException;
 import bo.com.oxipuroriente.inventory.modules.productos.application.DuplicateProductCodeException;
 import bo.com.oxipuroriente.inventory.modules.productos.application.ProductNotFoundException;
 import bo.com.oxipuroriente.inventory.modules.ventas.application.SalesNoteException;
+import org.springframework.security.access.AccessDeniedException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -36,6 +39,21 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IamAuthenticationException.class)
     public ResponseEntity<Map<String, String>> handleIamAuthentication(IamAuthenticationException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", exception.getMessage()));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, String>> handleAccessDenied() {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "access_denied"));
+    }
+
+    @ExceptionHandler(InvalidUserRoleException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidRole(InvalidUserRoleException exception) {
+        return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidUserProfileException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidUserProfile(InvalidUserProfileException exception) {
+        return ResponseEntity.badRequest().body(Map.of("error", exception.getMessage()));
     }
 
     @ExceptionHandler(DuplicateCylinderSerialNumberException.class)

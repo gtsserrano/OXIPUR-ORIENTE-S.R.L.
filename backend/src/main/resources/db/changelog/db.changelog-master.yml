@@ -813,3 +813,11 @@ databaseChangeLog:
             relativeToChangelogFile: true
             splitStatements: true
             stripComments: true
+  - changeSet:
+      id: 023-expand-profile-password-hash
+      author: codex
+      changes:
+        - modifyDataType:
+            tableName: user_profiles
+            columnName: password_hash
+            newDataType: VARCHAR(128)
