@@ -565,13 +565,18 @@ button {
 
 .logout {
   height: 40px;
-  border: 0;
+  border: 1px solid #efc2c2;
   border-radius: 8px;
   padding: 0 18px;
-  background: #eaf2f6;
-  color: var(--ink);
+  background: #f8dddd;
+  color: #842b2b;
   font-size: 15px;
   font-weight: 600;
+}
+
+.logout:hover {
+  background: #f3cdcd;
+  color: #742222;
 }
 
 .workspace {
@@ -843,7 +848,8 @@ button {
 }
 
 .profileEditModal,
-.cylinderEditModal {
+.cylinderEditModal,
+.logoutConfirmModal {
   width: min(100%, 680px);
   max-height: min(760px, calc(100vh - 48px));
   overflow: auto;
@@ -869,8 +875,79 @@ button {
 
 .modalOverlay.closing .profileEditModal,
 .modalOverlay.closing .cylinderEditModal,
+.modalOverlay.closing .logoutConfirmModal,
 .modalOverlay.closing .detailModal {
   animation: modalPanelOut 180ms ease both;
+}
+
+.logoutConfirmModal {
+  width: min(100%, 440px);
+  padding: 22px;
+  overflow: visible;
+}
+
+.logoutConfirmHeader {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.logoutConfirmIcon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #eaf7fb;
+  color: var(--accent-strong);
+}
+
+.logoutConfirmHeader span {
+  display: block;
+  color: #007ca0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.logoutConfirmHeader h3 {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.logoutConfirmModal p {
+  margin: 18px 0 0;
+  color: #53677f;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.logoutConfirmActions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.logoutConfirmActions button {
+  min-width: 132px;
+}
+
+.logoutConfirmDangerBtn {
+  border: 1px solid #efc2c2;
+  background: #f8dddd;
+  color: #842b2b;
+  box-shadow: none;
+}
+
+.logoutConfirmDangerBtn:hover {
+  background: #f3cdcd;
+  color: #742222;
 }
 
 .modalHeader {

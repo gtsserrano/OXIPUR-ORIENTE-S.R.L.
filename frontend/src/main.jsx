@@ -13,6 +13,7 @@ import {
   Eye,
   Gauge,
   LayoutDashboard,
+  LogOut,
   Banknote,
   Package,
   Plus,
@@ -38,6 +39,7 @@ const PROFILE_REFRESH_MS = 30000;
 const PROFILE_EDITOR_CLOSE_MS = 180;
 const CYLINDER_EDITOR_CLOSE_MS = 180;
 const DETAIL_MODAL_CLOSE_MS = 180;
+const LOGOUT_CONFIRM_CLOSE_MS = 180;
 const SALE_NOTE_TEMPLATE_URL = "/formato-nota-entrega.pdf";
 const SALE_NOTE_TEMPLATE_PAGE_INDEX = 1;
 const SALE_NOTE_ROWS_PER_PAGE = 16;
@@ -66,6 +68,7 @@ const navItems = [
 const PERMISSIONS = {
   MANAGE_CATALOGS: "MANAGE_CATALOGS",
   MANAGE_PROFILES: "MANAGE_PROFILES",
+  VIEW_PROFILE_ACTIVITY: "VIEW_PROFILE_ACTIVITY",
   VIEW_UTILITIES: "VIEW_UTILITIES"
 };
 
@@ -73,16 +76,18 @@ const ROLE_PERMISSIONS = {
   ADMINISTRADOR: new Set([
     PERMISSIONS.MANAGE_CATALOGS,
     PERMISSIONS.MANAGE_PROFILES,
+    PERMISSIONS.VIEW_PROFILE_ACTIVITY,
     PERMISSIONS.VIEW_UTILITIES
   ]),
-  OPERADOR: new Set()
+  OPERADOR: new Set([
+    PERMISSIONS.VIEW_PROFILE_ACTIVITY
+  ])
 };
 
 const PAGE_PERMISSIONS = {
   utilities: PERMISSIONS.VIEW_UTILITIES,
-  cylinders: PERMISSIONS.MANAGE_CATALOGS,
   products: PERMISSIONS.MANAGE_CATALOGS,
-  profiles: PERMISSIONS.MANAGE_PROFILES
+  profiles: PERMISSIONS.VIEW_PROFILE_ACTIVITY
 };
 
 const monthOptions = [
@@ -161,16 +166,19 @@ function App() {
   const [forms, setForms] = useState(emptyForm);
   const [profileEditorClosing, setProfileEditorClosing] = useState(false);
   const [cylinderEditorClosing, setCylinderEditorClosing] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [logoutConfirmClosing, setLogoutConfirmClosing] = useState(false);
   const [salesDateFilter, setSalesDateFilter] = useState(createDateFilter());
   const [movementDateFilter, setMovementDateFilter] = useState(createDateFilter());
   const [utilityDateFilter, setUtilityDateFilter] = useState(createDateFilter());
   const [selectedPrintNoteId, setSelectedPrintNoteId] = useState("");
   const visibleNavItems = useMemo(() => filterNavItemsForSession(navItems, session), [session?.profile?.roleName]);
+  const canManageProfiles = hasPermission(session, PERMISSIONS.MANAGE_PROFILES);
+  const canViewProfileActivity = hasPermission(session, PERMISSIONS.VIEW_PROFILE_ACTIVITY);
 
   async function loadAll() {
     setState((value) => ({ ...value, loading: true }));
     try {
-      const canManageProfiles = hasPermission(session, PERMISSIONS.MANAGE_PROFILES);
       const canViewUtilities = hasPermission(session, PERMISSIONS.VIEW_UTILITIES);
       const [cylinders, products, inventory, movements, salesNotes, operationalAlerts, profiles, utilitiesSummary] = await Promise.all([
         api("/api/cylinders"),
@@ -179,7 +187,7 @@ function App() {
         api("/api/inventory-movements"),
         api("/api/sales-notes"),
         api("/api/operational-alerts"),
-        canManageProfiles ? api("/api/profiles") : Promise.resolve([]),
+        canViewProfileActivity ? api("/api/profiles") : Promise.resolve([]),
         canViewUtilities ? api("/api/utilities/summary") : Promise.resolve(null)
       ]);
       setState((value) => ({
@@ -212,6 +220,8 @@ function App() {
       setSession(null);
       setWelcomeVisible(false);
       setActive("dashboard");
+      setLogoutConfirmOpen(false);
+      setLogoutConfirmClosing(false);
       setState((value) => ({ ...value, loading: false, message: "" }));
     }
 
@@ -231,6 +241,8 @@ function App() {
       setActive("dashboard");
       setLoginForm(emptyLoginForm);
       setLoginError("Sesión finalizada por inactividad. Ingresa nuevamente.");
+      setLogoutConfirmOpen(false);
+      setLogoutConfirmClosing(false);
       setState((value) => ({ ...value, loading: false, message: "" }));
     }
 
@@ -265,7 +277,6 @@ function App() {
   useEffect(() => {
     if (!session?.profile?.id) return undefined;
     let cancelled = false;
-    const canManageProfiles = hasPermission(session, PERMISSIONS.MANAGE_PROFILES);
 
     async function markCurrentProfileActive(refreshProfiles = false) {
       try {
@@ -281,7 +292,7 @@ function App() {
           ...value,
           profiles: value.profiles.map((profile) => (profile.id === updated.id ? updated : profile))
         }));
-        if (refreshProfiles && canManageProfiles) {
+        if (refreshProfiles && canViewProfileActivity) {
           const profiles = await api("/api/profiles");
           if (!cancelled) {
             setState((value) => ({ ...value, profiles }));
@@ -293,7 +304,7 @@ function App() {
     }
 
     async function refreshProfilePresence() {
-      if (!canManageProfiles) return;
+      if (!canViewProfileActivity) return;
       try {
         const profiles = await api("/api/profiles");
         if (!cancelled) {
@@ -306,7 +317,7 @@ function App() {
 
     markCurrentProfileActive(true);
     const heartbeat = window.setInterval(() => markCurrentProfileActive(false), PRESENCE_HEARTBEAT_MS);
-    const profileRefresh = canManageProfiles ? window.setInterval(refreshProfilePresence, PROFILE_REFRESH_MS) : null;
+    const profileRefresh = canViewProfileActivity ? window.setInterval(refreshProfilePresence, PROFILE_REFRESH_MS) : null;
     const handleFocus = () => markCurrentProfileActive(true);
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -484,6 +495,8 @@ function App() {
     event.preventDefault();
     setLoginLoading(true);
     setLoginError("");
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(LAST_ACTIVITY_KEY);
     try {
       const nextSession = await api("/api/iam/login", {
         method: "POST",
@@ -510,11 +523,35 @@ function App() {
     setSession(null);
     setWelcomeVisible(false);
     setActive("dashboard");
+    setLogoutConfirmOpen(false);
+    setLogoutConfirmClosing(false);
     setState((value) => ({ ...value, loading: true, message: "" }));
   }
 
+  function openLogoutConfirm() {
+    setLogoutConfirmClosing(false);
+    setLogoutConfirmOpen(true);
+  }
+
+  function closeLogoutConfirm() {
+    setLogoutConfirmClosing(true);
+    window.setTimeout(() => {
+      setLogoutConfirmOpen(false);
+      setLogoutConfirmClosing(false);
+    }, LOGOUT_CONFIRM_CLOSE_MS);
+  }
+
+  function confirmLogout() {
+    setLogoutConfirmClosing(true);
+    window.setTimeout(() => {
+      setLogoutConfirmOpen(false);
+      setLogoutConfirmClosing(false);
+      logout();
+    }, LOGOUT_CONFIRM_CLOSE_MS);
+  }
+
   async function loadProfiles() {
-    if (!hasPermission(session, PERMISSIONS.MANAGE_PROFILES)) return;
+    if (!hasPermission(session, PERMISSIONS.VIEW_PROFILE_ACTIVITY)) return;
     const profiles = await api("/api/profiles");
     setState((value) => ({ ...value, profiles }));
   }
@@ -826,7 +863,7 @@ function App() {
     ),
     cylinders: <CylindersView forms={forms} setForms={setForms} createCylinder={createCylinder} updateCylinder={updateCylinder} cylinders={state.cylinders} editCylinder={editCylinder} closeCylinderEditor={closeCylinderEditor} cylinderEditorClosing={cylinderEditorClosing} deleteCylinder={deleteCylinder} />,
     products: <ProductsView forms={forms} setForms={setForms} createProduct={createProduct} products={state.products} editProduct={editProduct} deleteProduct={deleteProduct} />,
-    profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} updateProfile={updateProfile} profiles={state.profiles} loadProfiles={loadProfiles} editProfile={editProfile} closeProfileEditor={closeProfileEditor} profileEditorClosing={profileEditorClosing} deleteProfile={deleteProfile} />,
+    profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} updateProfile={updateProfile} profiles={state.profiles} loadProfiles={loadProfiles} editProfile={editProfile} closeProfileEditor={closeProfileEditor} profileEditorClosing={profileEditorClosing} deleteProfile={deleteProfile} canManageProfiles={canManageProfiles} />,
     printing: <PrintingView salesNotes={state.salesNotes} selectedPrintNoteId={selectedPrintNoteId} setSelectedPrintNoteId={setSelectedPrintNoteId} printSaleNote={printSaleNote} />,
     profile: <ProfileView session={session} />
   }[pageKey];
@@ -837,12 +874,19 @@ function App() {
     <div className="appShell">
       <Sidebar active={pageKey} setActive={setActive} navItems={visibleNavItems} />
       <main className="mainPane">
-        <Topbar title={activeMeta.label} session={session} onLogout={logout} />
+        <Topbar title={activeMeta.label} session={session} onLogoutRequest={openLogoutConfirm} />
         <section className="workspace">
           {state.message && <div className="toast">{state.message}</div>}
           {state.loading ? <Skeleton /> : page}
         </section>
       </main>
+      {logoutConfirmOpen && (
+        <LogoutConfirmModal
+          closing={logoutConfirmClosing}
+          onCancel={closeLogoutConfirm}
+          onConfirm={confirmLogout}
+        />
+      )}
     </div>
   );
 }
@@ -965,7 +1009,7 @@ function normalizeRoleName(roleName) {
   return normalized === "ADMIN" ? "ADMINISTRADOR" : normalized;
 }
 
-function Topbar({ title, session, onLogout }) {
+function Topbar({ title, session, onLogoutRequest }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const profile = session?.profile;
   const displayName = profile?.fullName || profile?.username || "Perfil";
@@ -1007,9 +1051,33 @@ function Topbar({ title, session, onLogout }) {
             </div>
           </div>
         </div>
-        <button className="logout" type="button" onClick={onLogout}>Salir</button>
+        <button className="logout" type="button" onClick={onLogoutRequest}>Cerrar sesion</button>
       </div>
     </header>
+  );
+}
+
+function LogoutConfirmModal({ closing, onCancel, onConfirm }) {
+  return (
+    <div className={`modalOverlay ${closing ? "closing" : "open"}`} onMouseDown={onCancel}>
+      <section className="logoutConfirmModal" role="dialog" aria-modal="true" aria-labelledby="logoutConfirmTitle" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="logoutConfirmHeader">
+          <div className="logoutConfirmIcon">
+            <LogOut size={20} />
+          </div>
+          <div>
+            <span>SESION</span>
+            <h3 id="logoutConfirmTitle">Cerrar sesion</h3>
+          </div>
+          <IconButton title="Cerrar" onClick={onCancel} icon={X} />
+        </div>
+        <p>Deseas cerrar la sesion actual?</p>
+        <div className="logoutConfirmActions">
+          <button type="button" className="secondaryBtn" onClick={onCancel}>Cancelar</button>
+          <button type="button" className="primaryBtn logoutConfirmDangerBtn" onClick={onConfirm}>Cerrar sesion</button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1868,13 +1936,34 @@ function ProductsView({ forms, setForms, createProduct, products, editProduct, d
   );
 }
 
-function ProfilesView({ forms, setForms, createProfile, updateProfile, profiles, loadProfiles, editProfile, closeProfileEditor, profileEditorClosing, deleteProfile }) {
+function ProfilesView({ forms, setForms, createProfile, updateProfile, profiles, loadProfiles, editProfile, closeProfileEditor, profileEditorClosing, deleteProfile, canManageProfiles }) {
   const form = forms.profile;
   const editor = forms.profileEditor;
+  const columns = canManageProfiles
+    ? ["Nombre", "Usuario", "Rol", "Ultima actividad", "Estado", "Acciones"]
+    : ["Nombre", "Usuario", "Rol", "Ultima actividad", "Estado"];
+  const rows = profiles.map((profile) => {
+    const cells = [
+      profile.fullName,
+      profile.username || "-",
+      profile.roleName,
+      formatDateTime(profile.lastActivityAt),
+      profile.online ? <span className="onlineBadge">EN LINEA</span> : <span className="offlineBadge">FUERA DE LINEA</span>
+    ];
+    if (canManageProfiles) {
+      cells.push(
+        <div className="rowActions">
+          <IconButton title="Editar perfil" onClick={() => editProfile(profile)} icon={Edit3} />
+          <IconButton title="Eliminar perfil" onClick={() => deleteProfile(profile)} icon={Trash2} />
+        </div>
+      );
+    }
+    return cells;
+  });
   return (
     <>
-      <PageIntro eyebrow="ADMIN" title="Perfiles" subtitle="Administración de perfiles y actividad reciente." />
-      <Card title="Nuevo perfil">
+      <PageIntro eyebrow={canManageProfiles ? "ADMIN" : "ACTIVIDAD"} title="Perfiles" subtitle="Actividad reciente de los perfiles del sistema." />
+      {canManageProfiles && <Card title="Nuevo perfil">
         <form onSubmit={createProfile}>
           <div className="formGrid five">
             <Field label="Nombre">
@@ -1897,28 +1986,18 @@ function ProfilesView({ forms, setForms, createProfile, updateProfile, profiles,
             </div>
           </div>
         </form>
-      </Card>
+      </Card>}
       <Card title="Actividad de perfiles">
         <div className="actionBar tableActionBar">
           <button type="button" className="secondaryBtn iconTextBtn" onClick={loadProfiles}><RefreshCw size={16} /> Actualizar</button>
         </div>
         <DataTable
-          columns={["Nombre", "Usuario", "Rol", "Última actividad", "Estado", "Acciones"]}
-          rows={profiles.map((profile) => [
-            profile.fullName,
-            profile.username || "-",
-            profile.roleName,
-            formatDateTime(profile.lastActivityAt),
-            profile.online ? <span className="onlineBadge">EN LINEA</span> : <span className="offlineBadge">FUERA DE LINEA</span>,
-            <div className="rowActions">
-              <IconButton title="Editar perfil" onClick={() => editProfile(profile)} icon={Edit3} />
-              <IconButton title="Eliminar perfil" onClick={() => deleteProfile(profile)} icon={Trash2} />
-            </div>
-          ])}
+          columns={columns}
+          rows={rows}
           empty="Sin perfiles registrados"
         />
       </Card>
-      {editor.id && (
+      {canManageProfiles && editor.id && (
         <div className={`modalOverlay ${profileEditorClosing ? "closing" : "open"}`} onMouseDown={closeProfileEditor}>
           <section className="profileEditModal" onMouseDown={(event) => event.stopPropagation()}>
             <div className="modalHeader">
@@ -2588,7 +2667,7 @@ function escapeHtml(value) {
 async function api(path, options = {}) {
   const session = readStoredSession();
   const headers = options.body ? { "Content-Type": "application/json" } : {};
-  if (session?.accessToken) {
+  if (session?.accessToken && path !== "/api/iam/login") {
     headers.Authorization = `Bearer ${session.accessToken}`;
   }
   const response = await fetch(path, {

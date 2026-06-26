@@ -61,6 +61,25 @@ class IamControllerTests {
     }
 
     @Test
+    void logsInWithSeededAdminCredentials() throws Exception {
+        JsonNode response = objectMapper.readTree(mockMvc.perform(post("/api/iam/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "admin",
+                                  "password": "admin123"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+
+        assertThat(response.get("accessToken").asText()).isNotBlank();
+        assertThat(response.get("profile").get("roleName").asText()).isEqualTo("ADMINISTRADOR");
+    }
+
+    @Test
     void rejectsInvalidPassword() throws Exception {
         String username = "user-" + UUID.randomUUID();
         createProfile(username, "Clave123");

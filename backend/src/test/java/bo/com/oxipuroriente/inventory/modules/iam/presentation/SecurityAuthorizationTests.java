@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
@@ -90,6 +91,67 @@ class SecurityAuthorizationTests {
                                   "name": "Producto protegido"
                                 }
                                 """.formatted(unique("SEC-PROD"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void deniesOperatorReadingUtilities() throws Exception {
+        String token = loginToken(createProfile("OPERADOR"));
+
+        mockMvc.perform(get("/api/utilities/summary")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void allowsOperatorReadingProfileActivity() throws Exception {
+        String token = loginToken(createProfile("OPERADOR"));
+
+        mockMvc.perform(get("/api/profiles")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void allowsOperatorCylinderMutation() throws Exception {
+        String token = loginToken(createProfile("OPERADOR"));
+
+        JsonNode response = objectMapper.readTree(mockMvc.perform(post("/api/cylinders")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "serialNumber": "%s",
+                                  "capacityM3": 6.0,
+                                  "owner": "OXIPUR",
+                                  "price": 100.0,
+                                  "ownerType": "COMPANY"
+                                }
+                                """.formatted(unique("CYL-OPERADOR"))))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+
+        assertThat(response.get("owner").asText()).isEqualTo("OXIPUR");
+    }
+
+    @Test
+    void deniesOperatorProfileUpdate() throws Exception {
+        String token = loginToken(createProfile("OPERADOR"));
+        UserProfile target = createProfile("OPERADOR");
+
+        mockMvc.perform(put("/api/profiles/{id}", target.getId())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fullName": "Perfil protegido %s",
+                                  "roleName": "OPERADOR",
+                                  "username": "%s",
+                                  "password": ""
+                                }
+                                """.formatted(UUID.randomUUID(), unique("perfil-protegido"))))
                 .andExpect(status().isForbidden());
     }
 
