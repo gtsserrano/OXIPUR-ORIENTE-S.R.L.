@@ -5,7 +5,7 @@ public enum AuditAction {
     UPDATE,
     DELETE,
     DEACTIVATE,
+    MERGE,
     CANCEL,
     IMPORT
 }
-

@@ -1,7 +1,7 @@
 package bo.com.oxipuroriente.inventory.modules.clientes.application;
 
 import java.util.List;
-import java.util.Locale;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,16 +19,21 @@ public class CustomerService {
 
     private final CustomerRepository repository;
     private final AuditLogService auditLogService;
+    private final CustomerResolver customerResolver;
 
-    public CustomerService(CustomerRepository repository, AuditLogService auditLogService) {
+    public CustomerService(
+            CustomerRepository repository,
+            AuditLogService auditLogService,
+            CustomerResolver customerResolver) {
         this.repository = repository;
         this.auditLogService = auditLogService;
+        this.customerResolver = customerResolver;
     }
 
     @Transactional
     public CustomerResponse create(CreateCustomerRequest request) {
-        String normalizedName = normalize(request.name());
-        if (repository.existsByNormalizedName(normalizedName)) {
+        String normalizedName = customerResolver.normalize(request.name());
+        if (customerResolver.findExisting(normalizedName).isPresent()) {
             throw new DuplicateCustomerNameException(normalizedName);
         }
 
@@ -58,12 +63,17 @@ public class CustomerService {
         Customer customer = findCustomer(id);
         CustomerResponse previous = CustomerResponse.from(customer);
         if (request.name() != null && !request.name().isBlank()) {
-            String normalizedName = normalize(request.name());
-            if (repository.existsByNormalizedNameAndIdNot(normalizedName, id)) {
+            String normalizedName = customerResolver.normalize(request.name());
+            Optional<Customer> existing = customerResolver.findExisting(normalizedName);
+            if (existing.isPresent() && !existing.orElseThrow().getId().equals(id)) {
                 throw new DuplicateCustomerNameException(normalizedName);
             }
+            String previousName = customer.getName();
             customer.setName(normalizedName);
             customer.setNormalizedName(normalizedName);
+            if (!previousName.equals(normalizedName)) {
+                customerResolver.registerAlias(id, previousName, "RENAME");
+            }
         }
         if (request.active() != null) {
             customer.setActive(request.active());
@@ -87,7 +97,4 @@ public class CustomerService {
                 .orElseThrow(() -> new CustomerNotFoundException(id));
     }
 
-    private String normalize(String name) {
-        return name.trim().toUpperCase(Locale.ROOT);
-    }
 }

@@ -5,6 +5,7 @@
 | `user_profiles` | Usuarios, credenciales, rol y actividad. |
 | `audit_logs` | Auditoria de creaciones, cambios, anulaciones y eliminaciones. |
 | `customers` | Catalogo normalizado de clientes. |
+| `customer_aliases` | Nombres historicos que apuntan al cliente canonico y evitan nuevos duplicados. |
 | `sales_notes` | Cabecera de la nota de venta, cliente, fecha, estado y totales. |
 | `sales_note_delivered_cylinders` | Cilindros llenos entregados en una nota, producto y monto. |
 | `sales_note_collected_cylinders` | Cilindros vacios recibidos dentro de una nota. |
@@ -40,6 +41,8 @@ de consulta esta restringida al rol `ADMINISTRADOR`.
 ```text
 customers
     1
+    |
+    +---- N customer_aliases
     |
     N
 sales_notes

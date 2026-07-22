@@ -6,11 +6,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -23,6 +27,9 @@ import bo.com.oxipuroriente.inventory.modules.auditoria.infrastructure.AuditLogR
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.Cylinder;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderLocationType;
 import bo.com.oxipuroriente.inventory.modules.cilindros.infrastructure.CylinderRepository;
+import bo.com.oxipuroriente.inventory.modules.clientes.domain.Customer;
+import bo.com.oxipuroriente.inventory.modules.clientes.domain.CustomerAlias;
+import bo.com.oxipuroriente.inventory.modules.clientes.infrastructure.CustomerAliasRepository;
 import bo.com.oxipuroriente.inventory.modules.clientes.infrastructure.CustomerRepository;
 import bo.com.oxipuroriente.inventory.modules.inventario.infrastructure.InventoryMovementRepository;
 import bo.com.oxipuroriente.inventory.modules.productos.domain.Product;
@@ -68,6 +75,9 @@ class SalesNoteControllerTests {
 
     @Autowired
     private CustomerRepository customerRepository;
+
+    @Autowired
+    private CustomerAliasRepository customerAliasRepository;
 
     @Autowired
     private AuditLogRepository auditLogRepository;
@@ -178,6 +188,66 @@ class SalesNoteControllerTests {
     }
 
     @Test
+    void exportsFilteredSalesNoteMovementsUsingReferenceExcelFormat() throws Exception {
+        Warehouse warehouse = mainWarehouse();
+        Product product = createProduct();
+        Cylinder delivered = createCylinderInPlant(warehouse.getId());
+        Cylinder collected = createCylinderInCustomer("Cliente Excel");
+        String noteNumber = next("NV-EXCEL");
+
+        postSalesNote("""
+                {
+                  "noteNumber": "%s",
+                  "customerName": "Cliente Excel",
+                  "noteDate": "2031-03-15T09:45:00",
+                  "deliveredCylinders": [
+                    {
+                      "cylinderId": %d,
+                      "productId": %d,
+                      "capacityM3": 6.00,
+                      "ownerName": "Oxipur",
+                      "amount": 85.50,
+                      "observations": "Entrega Excel"
+                    }
+                  ],
+                  "collectedCylinders": [
+                    {
+                      "cylinderId": %d,
+                      "productId": %d,
+                      "capacityM3": 5.25,
+                      "ownerName": "Cliente",
+                      "observations": "Recibido vacio"
+                    }
+                  ]
+                }
+                """.formatted(noteNumber, delivered.getId(), product.getId(), collected.getId(), product.getId()));
+
+        byte[] content = mockMvc.perform(get(
+                        "/api/sales-notes/movements.xlsx?dateFilterType=MONTH&year=2031&month=3"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsByteArray();
+
+        try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(content))) {
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(1);
+            Sheet sheet = workbook.getSheet("DetalleMovimientos");
+            assertThat(sheet).isNotNull();
+            assertThat(sheet.getLastRowNum()).isEqualTo(2);
+            assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Boleta");
+            assertThat(sheet.getRow(0).getCell(10).getStringCellValue()).isEqualTo("Observaciones");
+            assertThat(sheet.getRow(1).getCell(0).getStringCellValue()).isEqualTo(noteNumber);
+            assertThat(sheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("15/03/2031 09:45");
+            assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo(delivered.getSerialNumber());
+            assertThat(sheet.getRow(1).getCell(8).getStringCellValue()).isEqualTo("Entregado");
+            assertThat(sheet.getRow(1).getCell(9).getStringCellValue()).isEqualTo("85.50");
+            assertThat(sheet.getRow(2).getCell(2).getStringCellValue()).isEqualTo(collected.getSerialNumber());
+            assertThat(sheet.getRow(2).getCell(8).getStringCellValue()).isEqualTo("Recibido");
+            assertThat(sheet.getRow(2).getCell(9).getStringCellValue()).isEmpty();
+        }
+    }
+
+    @Test
     void persistsEveryRelatedTableWhenCreatingMixedSalesNote() throws Exception {
         Warehouse warehouse = mainWarehouse();
         Product product = createProduct();
@@ -226,6 +296,48 @@ class SalesNoteControllerTests {
         assertThat(movementRepository.count()).isEqualTo(movementsBefore + 2);
         assertThat(customerRepository.count()).isEqualTo(customersBefore + 1);
         assertThat(auditLogRepository.count()).isEqualTo(auditsBefore + 1);
+    }
+
+    @Test
+    void resolvesHistoricalCustomerAliasToCanonicalCustomer() throws Exception {
+        Warehouse warehouse = mainWarehouse();
+        Product product = createProduct();
+        Cylinder cylinder = createCylinderInPlant(warehouse.getId());
+
+        String canonicalName = next("CLIENTE-CANONICO");
+        String aliasName = next("CLIENTE-ALIAS");
+        Customer canonical = new Customer();
+        canonical.setName(canonicalName);
+        canonical.setNormalizedName(canonicalName);
+        canonical = customerRepository.save(canonical);
+
+        CustomerAlias alias = new CustomerAlias();
+        alias.setCustomerId(canonical.getId());
+        alias.setAliasName(aliasName);
+        alias.setNormalizedAlias(aliasName);
+        alias.setSourceType("TEST");
+        customerAliasRepository.save(alias);
+
+        long customersBefore = customerRepository.count();
+        JsonNode response = postSalesNote("""
+                {
+                  "noteNumber": "%s",
+                  "customerName": "%s",
+                  "noteDate": "2026-07-22T10:30:00",
+                  "deliveredCylinders": [
+                    {
+                      "cylinderId": %d,
+                      "productId": %d
+                    }
+                  ]
+                }
+                """.formatted(next("NV-ALIAS"), aliasName, cylinder.getId(), product.getId()));
+
+        assertThat(response.get("customerId").longValue()).isEqualTo(canonical.getId());
+        assertThat(response.get("customerName").asText()).isEqualTo(canonicalName);
+        assertThat(customerRepository.count()).isEqualTo(customersBefore);
+        assertThat(cylinderRepository.findById(cylinder.getId()).orElseThrow().getCurrentCustomerName())
+                .isEqualTo(canonicalName);
     }
 
     @Test

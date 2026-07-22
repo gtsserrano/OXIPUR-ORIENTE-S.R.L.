@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -22,7 +21,7 @@ import bo.com.oxipuroriente.inventory.modules.cilindros.domain.Cylinder;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderLocationType;
 import bo.com.oxipuroriente.inventory.modules.cilindros.infrastructure.CylinderRepository;
 import bo.com.oxipuroriente.inventory.modules.clientes.domain.Customer;
-import bo.com.oxipuroriente.inventory.modules.clientes.infrastructure.CustomerRepository;
+import bo.com.oxipuroriente.inventory.modules.clientes.application.CustomerResolver;
 import bo.com.oxipuroriente.inventory.modules.inventario.domain.InventoryMovement;
 import bo.com.oxipuroriente.inventory.modules.inventario.domain.InventoryMovementType;
 import bo.com.oxipuroriente.inventory.modules.inventario.infrastructure.InventoryMovementRepository;
@@ -53,7 +52,7 @@ public class SalesNoteService {
     private final CylinderRepository cylinderRepository;
     private final ProductRepository productRepository;
     private final WarehouseRepository warehouseRepository;
-    private final CustomerRepository customerRepository;
+    private final CustomerResolver customerResolver;
     private final AuditLogService auditLogService;
 
     public SalesNoteService(
@@ -64,7 +63,7 @@ public class SalesNoteService {
             CylinderRepository cylinderRepository,
             ProductRepository productRepository,
             WarehouseRepository warehouseRepository,
-            CustomerRepository customerRepository,
+            CustomerResolver customerResolver,
             AuditLogService auditLogService) {
         this.salesNoteRepository = salesNoteRepository;
         this.deliveredRepository = deliveredRepository;
@@ -73,7 +72,7 @@ public class SalesNoteService {
         this.cylinderRepository = cylinderRepository;
         this.productRepository = productRepository;
         this.warehouseRepository = warehouseRepository;
-        this.customerRepository = customerRepository;
+        this.customerResolver = customerResolver;
         this.auditLogService = auditLogService;
     }
 
@@ -91,8 +90,8 @@ public class SalesNoteService {
         validateNoRepeatedCylinder(delivered, collected);
 
         SalesNoteSourceType sourceType = request.sourceType() == null ? SalesNoteSourceType.USER : request.sourceType();
-        String customerName = normalizeCustomerName(request.customerName());
-        Customer customer = findOrCreateCustomer(customerName);
+        Customer customer = customerResolver.resolveOrCreate(request.customerName());
+        String customerName = customer.getName();
 
         SalesNote salesNote = new SalesNote();
         salesNote.setNoteNumber(request.noteNumber());
@@ -164,9 +163,9 @@ public class SalesNoteService {
             throw new SalesNoteException("Cancelled sales notes cannot be edited");
         }
         if (request.customerName() != null && !request.customerName().isBlank()) {
-            String customerName = normalizeCustomerName(request.customerName());
-            salesNote.setCustomerId(findOrCreateCustomer(customerName).getId());
-            salesNote.setCustomerName(customerName);
+            Customer customer = customerResolver.resolveOrCreate(request.customerName());
+            salesNote.setCustomerId(customer.getId());
+            salesNote.setCustomerName(customer.getName());
         }
         if (request.noteDate() != null) {
             salesNote.setNoteDate(request.noteDate());
@@ -419,26 +418,11 @@ public class SalesNoteService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private Customer findOrCreateCustomer(String customerName) {
-        String normalizedName = normalizeCustomerName(customerName);
-        return customerRepository.findByNormalizedName(normalizedName)
-                .orElseGet(() -> {
-                    Customer customer = new Customer();
-                    customer.setName(normalizedName);
-                    customer.setNormalizedName(normalizedName);
-                    return customerRepository.save(customer);
-                });
-    }
-
     private String ownerNameOrCylinderOwner(String ownerName, Cylinder cylinder) {
         if (ownerName != null && !ownerName.isBlank()) {
             return ownerName.trim();
         }
         return cylinder.getOwner();
-    }
-
-    private String normalizeCustomerName(String customerName) {
-        return customerName.trim().toUpperCase(Locale.ROOT);
     }
 
     private boolean sameCustomer(String currentCustomerName, String requestedCustomerName) {

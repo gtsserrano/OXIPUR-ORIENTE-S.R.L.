@@ -5,6 +5,9 @@ import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import bo.com.oxipuroriente.inventory.modules.ventas.application.SalesNoteService;
+import bo.com.oxipuroriente.inventory.modules.ventas.application.SalesNoteMovementExportService;
+import bo.com.oxipuroriente.inventory.modules.ventas.application.SalesNoteMovementExportService.ExportedWorkbook;
 import bo.com.oxipuroriente.inventory.shared.application.DateFilterType;
 import bo.com.oxipuroriente.inventory.shared.application.DatePeriodFactory;
 import jakarta.validation.Valid;
@@ -26,9 +31,11 @@ import jakarta.validation.Valid;
 public class SalesNoteController {
 
     private final SalesNoteService service;
+    private final SalesNoteMovementExportService movementExportService;
 
-    public SalesNoteController(SalesNoteService service) {
+    public SalesNoteController(SalesNoteService service, SalesNoteMovementExportService movementExportService) {
         this.service = service;
+        this.movementExportService = movementExportService;
     }
 
     @PostMapping
@@ -46,6 +53,25 @@ public class SalesNoteController {
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month) {
         return service.findAll(DatePeriodFactory.from(dateFilterType, date, year, month));
+    }
+
+    @GetMapping(value = "/movements.xlsx", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    public ResponseEntity<byte[]> exportMovements(
+            @RequestParam(required = false) DateFilterType dateFilterType,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Integer month) {
+        ExportedWorkbook exported = movementExportService.export(
+                DatePeriodFactory.from(dateFilterType, date, year, month));
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(exported.fileName())
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .header("X-Movement-Count", String.valueOf(exported.movementCount()))
+                .body(exported.content());
     }
 
     @GetMapping("/{id}")

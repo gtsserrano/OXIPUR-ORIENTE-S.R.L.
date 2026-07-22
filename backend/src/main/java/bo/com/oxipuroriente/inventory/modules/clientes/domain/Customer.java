@@ -28,6 +28,12 @@ public class Customer {
     @Column(nullable = false)
     private boolean active = true;
 
+    @Column(name = "merged_into_customer_id")
+    private Long mergedIntoCustomerId;
+
+    @Column(name = "merged_at")
+    private Instant mergedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -60,6 +66,22 @@ public class Customer {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public Long getMergedIntoCustomerId() {
+        return mergedIntoCustomerId;
+    }
+
+    public void setMergedIntoCustomerId(Long mergedIntoCustomerId) {
+        this.mergedIntoCustomerId = mergedIntoCustomerId;
+    }
+
+    public Instant getMergedAt() {
+        return mergedAt;
+    }
+
+    public void setMergedAt(Instant mergedAt) {
+        this.mergedAt = mergedAt;
     }
 
     public Instant getCreatedAt() {

@@ -308,7 +308,7 @@ button {
 }
 
 .navChildren.open {
-  max-height: 110px;
+  max-height: 160px;
   opacity: 1;
   transform: translateY(0);
 }
@@ -654,6 +654,10 @@ button {
   grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
   gap: 22px;
   margin-bottom: 28px;
+}
+
+.dashboardGrid {
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 2fr);
 }
 
 .card {
@@ -1048,6 +1052,47 @@ button {
   flex-wrap: wrap;
 }
 
+.recentMovementsCard {
+  min-width: 0;
+}
+
+.recentMovementsCard .dateFilter {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.recentMovementsCard .dateFilterActions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.recentMovementsTable table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.recentMovementsTable th,
+.recentMovementsTable td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recentMovementsTable th:nth-child(1) {
+  width: 24%;
+}
+
+.recentMovementsTable th:nth-child(2) {
+  width: 15%;
+}
+
+.recentMovementsTable th:nth-child(3) {
+  width: 34%;
+}
+
+.recentMovementsTable th:nth-child(4) {
+  width: 27%;
+}
+
 .salesComposer {
   display: block;
 }
@@ -1138,10 +1183,90 @@ button {
   gap: 12px;
 }
 
+.utilityDetail .statusRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 12px 14px;
+  align-content: center;
+}
+
+.utilityDetail .statusRow > div {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.utilityDetail .statusRow b {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.utilityDetail .statusRow em {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.excelFormatPanel {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.excelFormatIcon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  background: #16804c;
+}
+
+.excelFormatPanel strong,
+.excelFormatPanel span {
+  display: block;
+}
+
+.excelFormatPanel span {
+  margin-top: 5px;
+  color: var(--muted);
+}
+
+.excelColumns {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.excelColumns span {
+  padding: 7px 10px;
+  border: 1px solid #cfe1ec;
+  border-radius: 999px;
+  color: #35516d;
+  background: #f7fbfe;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .dangerNotice {
   border-color: #fac3c3;
   background: #fff0f0;
   color: #8a1f1f;
+}
+
+.successNotice {
+  border-color: #a7dfbd;
+  background: #eaf9f0;
+  color: #176d36;
 }
 
 .iconBtn {
@@ -1362,6 +1487,14 @@ td {
 
 .compactTable [role="rowgroup"] .compactTableRow:last-child {
   border-bottom: 0;
+}
+
+.cylindersTable .compactTableGrid {
+  min-width: 968px;
+}
+
+.cylindersTable .compactTableRow {
+  grid-template-columns: 118px 80px minmax(220px, 1fr) 120px 120px minmax(180px, 1fr) 110px 120px;
 }
 
 tr:last-child td {
@@ -1862,6 +1995,12 @@ tr:last-child td {
   }
 }
 
+@media (max-width: 1400px) {
+  .dashboardGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 760px) {
   .loginShell {
     padding: 22px;
@@ -1932,6 +2071,10 @@ tr:last-child td {
     .previewMetaGrid,
     .utilityMetrics,
     .utilityDetail {
+    grid-template-columns: 1fr;
+  }
+
+  .recentMovementsCard .dateFilter {
     grid-template-columns: 1fr;
   }
 

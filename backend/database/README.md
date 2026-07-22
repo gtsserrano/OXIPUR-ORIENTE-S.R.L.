@@ -10,6 +10,8 @@ Esta carpeta `backend/database` muestra el modelo MySQL utilizado por el sistema
 - `queries/verify_historical_import.sql`: comprueba los totales importados y muestra el detalle de una nota.
 - `migrations/README.md`: ubicacion y orden de las migraciones que aplica el backend.
 - `seeders/README.md`: ubicacion y resumen de la precarga historica.
+- `backups/`: respaldos locales de seguridad; los archivos `.sql` no se incluyen en Git porque
+  contienen informacion operativa sensible.
 
 La fuente de verdad para bases existentes son las migraciones Liquibase de
 `backend/src/main/resources/db/changelog/db.changelog-master.yml`. Al iniciar el backend con el perfil
@@ -20,6 +22,7 @@ La precarga historica se encuentra en:
 
 - `backend/src/main/resources/db/changelog/027_import_historical_sales_notes.sql`
 - `backend/src/main/resources/db/changelog/data/027_historical_sales_note_rows_20260721.csv`
+- `backend/src/main/resources/db/changelog/031_merge_duplicate_customers.sql`
 
 ## Uso recomendado con MySQL Workbench y el backend
 

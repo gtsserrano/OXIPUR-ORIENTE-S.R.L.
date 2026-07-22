@@ -52,7 +52,8 @@ const navItems = [
     icon: ClipboardList,
     children: [
       { id: "sales-create", label: "Crear nota de venta" },
-      { id: "sales-registered", label: "Notas de venta registradas" }
+      { id: "sales-registered", label: "Notas de venta registradas" },
+      { id: "sales-export", label: "Exportar movimientos" }
     ]
   },
   { id: "printing", label: "Impresión", icon: Printer },
@@ -795,6 +796,7 @@ function App() {
         createSale={createSale}
         cylinders={state.cylinders}
         products={state.products}
+        customers={state.customers}
         inventory={state.inventory}
         salesNotes={state.salesNotes}
         editSale={editSale}
@@ -812,6 +814,7 @@ function App() {
         createSale={createSale}
         cylinders={state.cylinders}
         products={state.products}
+        customers={state.customers}
         inventory={state.inventory}
         salesNotes={state.salesNotes}
         editSale={editSale}
@@ -821,6 +824,7 @@ function App() {
         searchSalesNotes={searchSalesNotes}
       />
     ),
+    "sales-export": <SalesMovementExportView />,
     utilities: (
       <UtilitiesView
         summary={state.utilitiesSummary}
@@ -1074,14 +1078,14 @@ function Dashboard({ metrics, inventory, movements, operationalAlerts, movementD
         <Metric label="Clientes con cilindros" value={metrics.customers} icon={UserRound} />
         <Metric label="Productos activos" value={metrics.products} icon={Package} />
       </div>
-      <div className="splitGrid">
+      <div className="splitGrid dashboardGrid">
         <Card title="Alertas operativas">
           <StatusRow label="Cilindros de OXIPUR" value={operationalAlerts?.oxipurCylinderCount ?? 0} state="OK" />
           <StatusRow label="Cilindros fuera de planta" value={metrics.inCustomer} state={metrics.inCustomer > 0 ? "EN CURSO" : "OK"} />
           <StatusRow label="Cilindros sin ubicación" value={inventory.filter((item) => !item.currentLocationType).length} state="REVISAR" />
           <StatusRow label="Movimientos registrados" value={movements.length} state="OK" />
         </Card>
-        <Card title="Movimientos recientes">
+        <Card title="Movimientos recientes" className="recentMovementsCard">
           <DatePeriodFilter
             value={movementDateFilter}
             onChange={setMovementDateFilter}
@@ -1091,12 +1095,13 @@ function Dashboard({ metrics, inventory, movements, operationalAlerts, movementD
           <DataTable
             columns={["Tipo", "Cilindro", "Cliente", "Fecha"]}
             rows={latest.map((movement) => [
-              movement.movementType,
+              formatMovementType(movement.movementType),
               movement.cylinderId,
               movement.destinationCustomerName || movement.originCustomerName || "-",
-              movement.movementDate
+              formatDateTime(movement.movementDate)
             ])}
             empty="Sin movimientos registrados"
+            className="recentMovementsTable"
           />
         </Card>
       </div>
@@ -1327,13 +1332,20 @@ function ClientsView({ customers = [], initialInventory = [] }) {
   );
 }
 
-function SalesView({ mode = "create", forms, setForms, createSale, cylinders, products, inventory = [], salesNotes, editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes }) {
+function SalesView({ mode = "create", forms, setForms, createSale, cylinders, products, customers = [], inventory = [], salesNotes, editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes }) {
   const form = forms.sale;
   const [detailNote, setDetailNote] = useState(null);
   const activeCylinders = cylinders.filter((item) => item.active !== false);
   const activeProducts = products.filter((item) => item.active !== false);
   const showingCreation = mode === "create";
-  const existingCustomerNames = useMemo(() => new Set(buildCustomerGroups(inventory).map((client) => normalizeCustomerNameKey(client.name))), [inventory]);
+  const customerNameSuggestions = useMemo(
+    () => customers.map((customer) => uppercaseCustomerName(customer.name)).sort((left, right) => left.localeCompare(right, "es-BO")),
+    [customers]
+  );
+  const existingCustomerNames = useMemo(
+    () => new Set(customerNameSuggestions.map((name) => normalizeCustomerNameKey(name))),
+    [customerNameSuggestions]
+  );
   const ownerNameSuggestions = useMemo(() => {
     const suggestions = new Map();
     const addSuggestion = (name) => {
@@ -1345,11 +1357,12 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
     };
 
     addSuggestion(BRAND_OWNER_NAME);
+    customerNameSuggestions.forEach(addSuggestion);
     buildCustomerGroups(inventory).forEach((client) => addSuggestion(client.name));
     (cylinders || []).forEach((cylinder) => addSuggestion(cylinder.owner));
 
     return Array.from(suggestions.values()).sort((left, right) => left.localeCompare(right, "es-BO"));
-  }, [inventory, cylinders]);
+  }, [customerNameSuggestions, inventory, cylinders]);
   const ownerNameSuggestion = (value) => findOwnerNameSuggestion(ownerNameSuggestions, value);
   const customerNameKey = normalizeCustomerNameKey(form.customerName);
   const customerExists = customerNameKey ? existingCustomerNames.has(customerNameKey) : false;
@@ -1402,7 +1415,10 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                     {customerExists ? "Cliente ya existe en el apartado Clientes." : "Cliente no detectado en el apartado Clientes."}
                   </span>
                 )}
-                <input required value={form.customerName} onChange={(event) => setNested(setForms, "sale", "customerName", uppercaseCustomerName(event.target.value))} placeholder="Cliente" />
+                <input required list="sales-customer-suggestions" value={form.customerName} onChange={(event) => setNested(setForms, "sale", "customerName", uppercaseCustomerName(event.target.value))} placeholder="Cliente" />
+                <datalist id="sales-customer-suggestions">
+                  {customerNameSuggestions.map((name) => <option key={name} value={name} />)}
+                </datalist>
               </Field>
               <Field label="Fecha">
                 <input required type="datetime-local" value={form.noteDate} onChange={(event) => setNested(setForms, "sale", "noteDate", event.target.value)} />
@@ -1623,6 +1639,66 @@ function UtilitiesView({ summary, loading, error, dateFilter, setDateFilter, loa
   );
 }
 
+function SalesMovementExportView() {
+  const [dateFilter, setDateFilter] = useState(createDateFilter("MONTH"));
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+
+  async function generateExcel(nextFilter = dateFilter) {
+    setExporting(true);
+    setError("");
+    setResult(null);
+    try {
+      const exported = await downloadSalesMovementWorkbook(nextFilter);
+      setResult(exported);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <>
+      <PageIntro
+        eyebrow="EXCEL"
+        title="Exportar movimientos"
+        subtitle="Genera el detalle de cilindros entregados y recibidos de las notas de venta del periodo seleccionado."
+      />
+      <Card title="Periodo de las notas de venta">
+        <DatePeriodFilter
+          value={dateFilter}
+          onChange={setDateFilter}
+          onApply={generateExcel}
+          onClear={() => setResult(null)}
+          applyLabel={exporting ? "Generando..." : "Generar Excel"}
+          applyDisabled={exporting}
+        />
+        {error && <div className="notice dangerNotice">{error}</div>}
+        {result && (
+          <div className="notice successNotice">
+            Archivo generado: {result.fileName} ({result.movementCount} movimientos).
+          </div>
+        )}
+      </Card>
+      <Card title="Formato del archivo">
+        <div className="excelFormatPanel">
+          <div className="excelFormatIcon"><ArrowDownToLine size={22} /></div>
+          <div>
+            <strong>DetalleMovimientos</strong>
+            <span>Una fila por cilindro entregado o recibido, compatible con el formato proporcionado.</span>
+          </div>
+        </div>
+        <div className="excelColumns" aria-label="Columnas incluidas">
+          {["Boleta", "Fecha", "Serie", "Tamano (m³)", "Producto", "Propietario", "Cliente Nota", "Cliente", "Estado", "Monto (BOB)", "Observaciones"]
+            .map((column) => <span key={column}>{column}</span>)}
+        </div>
+      </Card>
+    </>
+  );
+}
+
 function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId, printSaleNote }) {
   const selectedNote = salesNotes.find((note) => String(note.id) === String(selectedPrintNoteId));
   return (
@@ -1644,7 +1720,7 @@ function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId,
           </button>
         </div>
         <DataTable
-          columns={["Seleccionar", "Número", "Cliente", "Fecha", "Estado", "Entregados", "Recogidos"]}
+          columns={["Seleccionar", "Número", "Cliente", "Fecha", "Estado"]}
           rows={salesNotes.map((note) => [
             <label className="printSelect">
               <input
@@ -1658,9 +1734,7 @@ function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId,
             note.noteNumber,
             note.customerName,
             formatDateTime(note.noteDate),
-            note.status === "CANCELLED" ? <span className="dangerBadge">ANULADA</span> : "REGISTERED",
-            formatLineSummary(note.deliveredCylinders),
-            formatLineSummary(note.collectedCylinders)
+            note.status === "CANCELLED" ? <span className="dangerBadge">ANULADA</span> : "REGISTERED"
           ])}
           empty="Sin notas registradas para imprimir"
         />
@@ -1736,7 +1810,7 @@ function PreviewSection({ title, columns, rows, empty }) {
   );
 }
 
-function DatePeriodFilter({ value, onChange, onApply, onClear }) {
+function DatePeriodFilter({ value, onChange, onApply, onClear, applyLabel = "Aplicar", applyDisabled = false }) {
   function update(field, fieldValue) {
     onChange({ ...value, [field]: fieldValue });
   }
@@ -1780,7 +1854,7 @@ function DatePeriodFilter({ value, onChange, onApply, onClear }) {
         </Field>
       )}
       <div className="dateFilterActions">
-        <button type="button" className="primaryBtn" onClick={() => onApply(value)}>Aplicar</button>
+        <button type="button" className="primaryBtn" onClick={() => onApply(value)} disabled={applyDisabled}>{applyLabel}</button>
         <button type="button" className="secondaryBtn" onClick={clear}>Limpiar</button>
       </div>
     </div>
@@ -1835,6 +1909,8 @@ function CylindersView({ forms, setForms, createCylinder, updateCylinder, cylind
       </Card>
       <Card title="Cilindros registrados">
         <DataTable
+          compact
+          className="cylindersTable"
           columns={["Serie", "m3", "Propietario", "Estado", "Ubicación", "Cliente actual", "Valor", "Acciones"]}
           rows={cylinders.map((item) => [
             item.serialNumber,
@@ -2049,9 +2125,9 @@ function PageIntro({ eyebrow, title, subtitle }) {
   );
 }
 
-function Card({ title, children }) {
+function Card({ title, children, className = "" }) {
   return (
-    <section className="card">
+    <section className={`card${className ? ` ${className}` : ""}`}>
       <h3>{title}</h3>
       {children}
     </section>
@@ -2166,7 +2242,7 @@ function DetailModal({ eyebrow, title, children, onClose }) {
   );
 }
 
-function DataTable({ columns, rows, empty, onRowClick, compact = false }) {
+function DataTable({ columns, rows, empty, onRowClick, compact = false, className = "" }) {
   if (!rows.length) {
     return <EmptyState title="Sin registros" text={empty} />;
   }
@@ -2188,7 +2264,7 @@ function DataTable({ columns, rows, empty, onRowClick, compact = false }) {
 
   if (compact) {
     return (
-      <div className="tableWrap compactTable" role="table">
+      <div className={`tableWrap compactTable${className ? ` ${className}` : ""}`} role="table">
         <div className="compactTableGrid">
           <div className="compactTableRow compactTableHeader" role="row">
             {columns.map((column) => <div className="compactTableCell" role="columnheader" key={column}>{column}</div>)}
@@ -2214,7 +2290,7 @@ function DataTable({ columns, rows, empty, onRowClick, compact = false }) {
   }
 
   return (
-    <div className={`tableWrap${compact ? " compactTable" : ""}`}>
+    <div className={`tableWrap${className ? ` ${className}` : ""}`}>
       <table>
         <thead>
           <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
@@ -2429,7 +2505,7 @@ function buildCustomerGroups(inventory) {
     .filter((item) => item.currentLocationType === "CLIENTE" && String(item.currentCustomerName || "").trim())
     .forEach((item) => {
       const name = uppercaseCustomerName(item.currentCustomerName);
-      const key = name.toLocaleLowerCase("es-BO");
+      const key = normalizeCustomerNameKey(name);
       if (!groups.has(key)) {
         groups.set(key, { name, cylinders: [], totalCapacity: 0 });
       }
@@ -2721,6 +2797,40 @@ async function api(path, options = {}) {
   return response.json();
 }
 
+async function downloadSalesMovementWorkbook(filter) {
+  const path = `/api/sales-notes/movements.xlsx${buildDateQuery(filter)}`;
+  const session = readStoredSession();
+  const headers = session?.accessToken ? { Authorization: `Bearer ${session.accessToken}` } : undefined;
+  const response = await fetch(path, { headers });
+
+  if (!response.ok) {
+    const text = await response.text();
+    const error = new Error(readErrorMessage(text, response.status));
+    error.status = response.status;
+    if (response.status === 401) {
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(LAST_ACTIVITY_KEY);
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    }
+    throw error;
+  }
+
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const fileNameMatch = disposition.match(/filename="?([^";]+)"?/i);
+  const fileName = fileNameMatch?.[1] || "oxipur_detallemovimientos.xlsx";
+  const movementCount = Number(response.headers.get("X-Movement-Count") || 0);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return { fileName, movementCount };
+}
+
 function readStoredSession() {
   try {
     const stored = localStorage.getItem(SESSION_KEY);
@@ -2781,6 +2891,12 @@ function formatDateTime(value) {
   return value.replace("T", " ").slice(0, 16);
 }
 
+function formatMovementType(value) {
+  if (value === "PLANTA_A_CLIENTE") return "Entrega";
+  if (value === "CLIENTE_A_PLANTA") return "Recogida";
+  return value || "-";
+}
+
 function formatSaleNoteDateForPdf(value) {
   if (!value) return "";
   const [date = "", time = ""] = String(value).split("T");
@@ -2798,7 +2914,11 @@ function uppercaseCustomerName(value) {
 }
 
 function normalizeCustomerNameKey(value) {
-  return uppercaseCustomerName(value).trim().toLocaleLowerCase("es-BO");
+  return uppercaseCustomerName(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("es-BO");
 }
 
 function normalizeCylinderNumberKey(value) {

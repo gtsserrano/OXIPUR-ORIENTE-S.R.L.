@@ -1233,3 +1233,91 @@ databaseChangeLog:
                   name: entity_id
                   value: "2026-07-21"
             where: entity_type = 'HISTORICAL_MOVEMENT_IMPORT' AND action = 'IMPORT' AND source_type = 'IMPORT'
+  - changeSet:
+      id: 031-create-customer-aliases-and-merge-tracking
+      author: codex
+      changes:
+        - addColumn:
+            tableName: customers
+            columns:
+              - column:
+                  name: merged_into_customer_id
+                  type: BIGINT
+              - column:
+                  name: merged_at
+                  type: TIMESTAMP
+        - addForeignKeyConstraint:
+            baseTableName: customers
+            baseColumnNames: merged_into_customer_id
+            referencedTableName: customers
+            referencedColumnNames: id
+            constraintName: fk_customers_merged_into
+            onDelete: RESTRICT
+        - createIndex:
+            tableName: customers
+            indexName: idx_customers_merged_into
+            columns:
+              - column:
+                  name: merged_into_customer_id
+        - createTable:
+            tableName: customer_aliases
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: customer_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: alias_name
+                  type: VARCHAR(160)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: normalized_alias
+                  type: VARCHAR(160)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_customer_aliases_normalized
+              - column:
+                  name: source_type
+                  type: VARCHAR(40)
+                  defaultValue: SYSTEM
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: customer_aliases
+            baseColumnNames: customer_id
+            referencedTableName: customers
+            referencedColumnNames: id
+            constraintName: fk_customer_aliases_customer
+            onDelete: RESTRICT
+        - createIndex:
+            tableName: customer_aliases
+            indexName: idx_customer_aliases_customer
+            columns:
+              - column:
+                  name: customer_id
+  - changeSet:
+      id: 032-merge-duplicate-customers
+      author: codex
+      dbms: mysql
+      changes:
+        - sqlFile:
+            path: 031_merge_duplicate_customers.sql
+            relativeToChangelogFile: true
+            encoding: UTF-8
+            splitStatements: true
+            stripComments: true

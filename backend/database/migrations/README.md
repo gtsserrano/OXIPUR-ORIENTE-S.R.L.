@@ -5,10 +5,15 @@ empaquetar la aplicacion:
 
 - `backend/src/main/resources/db/changelog/db.changelog-master.yml`
 - `backend/src/main/resources/db/changelog/027_import_historical_sales_notes.sql`
+- `backend/src/main/resources/db/changelog/031_merge_duplicate_customers.sql`
 
 Los cambios `026-normalize-customers-and-sales-note-amounts` y
 `027-import-historical-sales-note-details-20260721` crean las relaciones de clientes, montos, filas de
 detalle y trazabilidad del archivo historico.
+
+Los cambios `031-create-customer-aliases-and-merge-tracking` y `032-merge-duplicate-customers`
+conservan los nombres anteriores como alias, trasladan las referencias al cliente canonico y marcan
+los registros duplicados como fusionados sin borrar su historial.
 
 No se mantienen copias ejecutables en esta carpeta porque dos versiones de una misma migracion podrian
 desincronizar el codigo y MySQL. `../schema.sql` crea la base y `../tables/` contiene una definicion SQL
