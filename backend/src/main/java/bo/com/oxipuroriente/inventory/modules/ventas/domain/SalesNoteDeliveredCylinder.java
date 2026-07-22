@@ -37,6 +37,12 @@ public class SalesNoteDeliveredCylinder {
     @Column(name = "owner_name", nullable = false, length = 160)
     private String ownerName;
 
+    @Column(precision = 12, scale = 2)
+    private BigDecimal amount;
+
+    @Column(name = "source_row_number")
+    private Integer sourceRowNumber;
+
     @Column(length = 255)
     private String observations;
 
@@ -101,6 +107,22 @@ public class SalesNoteDeliveredCylinder {
 
     public void setOwnerName(String ownerName) {
         this.ownerName = ownerName;
+    }
+
+    public BigDecimal getAmount() {
+        return amount;
+    }
+
+    public void setAmount(BigDecimal amount) {
+        this.amount = amount;
+    }
+
+    public Integer getSourceRowNumber() {
+        return sourceRowNumber;
+    }
+
+    public void setSourceRowNumber(Integer sourceRowNumber) {
+        this.sourceRowNumber = sourceRowNumber;
     }
 
     public Instant getCreatedAt() {

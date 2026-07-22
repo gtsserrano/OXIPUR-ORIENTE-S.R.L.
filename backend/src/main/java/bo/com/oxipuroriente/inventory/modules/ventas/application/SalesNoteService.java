@@ -1,6 +1,7 @@
 package bo.com.oxipuroriente.inventory.modules.ventas.application;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -14,9 +15,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import bo.com.oxipuroriente.inventory.modules.almacenes.domain.Warehouse;
 import bo.com.oxipuroriente.inventory.modules.almacenes.infrastructure.WarehouseRepository;
+import bo.com.oxipuroriente.inventory.modules.auditoria.application.AuditLogService;
+import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditAction;
+import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditSourceType;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.Cylinder;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderLocationType;
 import bo.com.oxipuroriente.inventory.modules.cilindros.infrastructure.CylinderRepository;
+import bo.com.oxipuroriente.inventory.modules.clientes.domain.Customer;
+import bo.com.oxipuroriente.inventory.modules.clientes.infrastructure.CustomerRepository;
 import bo.com.oxipuroriente.inventory.modules.inventario.domain.InventoryMovement;
 import bo.com.oxipuroriente.inventory.modules.inventario.domain.InventoryMovementType;
 import bo.com.oxipuroriente.inventory.modules.inventario.infrastructure.InventoryMovementRepository;
@@ -47,6 +53,8 @@ public class SalesNoteService {
     private final CylinderRepository cylinderRepository;
     private final ProductRepository productRepository;
     private final WarehouseRepository warehouseRepository;
+    private final CustomerRepository customerRepository;
+    private final AuditLogService auditLogService;
 
     public SalesNoteService(
             SalesNoteRepository salesNoteRepository,
@@ -55,7 +63,9 @@ public class SalesNoteService {
             InventoryMovementRepository movementRepository,
             CylinderRepository cylinderRepository,
             ProductRepository productRepository,
-            WarehouseRepository warehouseRepository) {
+            WarehouseRepository warehouseRepository,
+            CustomerRepository customerRepository,
+            AuditLogService auditLogService) {
         this.salesNoteRepository = salesNoteRepository;
         this.deliveredRepository = deliveredRepository;
         this.collectedRepository = collectedRepository;
@@ -63,6 +73,8 @@ public class SalesNoteService {
         this.cylinderRepository = cylinderRepository;
         this.productRepository = productRepository;
         this.warehouseRepository = warehouseRepository;
+        this.customerRepository = customerRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -80,13 +92,16 @@ public class SalesNoteService {
 
         SalesNoteSourceType sourceType = request.sourceType() == null ? SalesNoteSourceType.USER : request.sourceType();
         String customerName = normalizeCustomerName(request.customerName());
+        Customer customer = findOrCreateCustomer(customerName);
 
         SalesNote salesNote = new SalesNote();
         salesNote.setNoteNumber(request.noteNumber());
+        salesNote.setCustomerId(customer.getId());
         salesNote.setCustomerName(customerName);
         salesNote.setNoteDate(request.noteDate());
         salesNote.setObservations(request.observations());
         salesNote.setUtilityAmount(utilityAmountOrZero(request.utilityAmount()));
+        salesNote.setTotalAmount(totalAmount(delivered));
         salesNote.setSourceType(sourceType);
         SalesNote savedNote = salesNoteRepository.save(salesNote);
         Warehouse mainWarehouse = findMainWarehouse();
@@ -98,28 +113,30 @@ public class SalesNoteService {
             registerCollectedCylinder(savedNote, sourceType, line, mainWarehouse);
         }
 
-        return findById(savedNote.getId());
+        SalesNoteResponse response = findById(savedNote.getId());
+        auditLogService.record(
+                AuditAction.CREATE,
+                "SALES_NOTE",
+                savedNote.getId(),
+                null,
+                response,
+                auditSourceType(sourceType));
+        return response;
     }
 
     @Transactional(readOnly = true)
     public List<SalesNoteResponse> findAll() {
-        return salesNoteRepository.findAll()
-                .stream()
-                .map(note -> findById(note.getId()))
-                .toList();
+        return loadResponses(salesNoteRepository.findAllByOrderByNoteDateDescIdDesc());
     }
 
     @Transactional(readOnly = true)
     public List<SalesNoteResponse> findAll(DatePeriod period) {
         List<SalesNote> notes = period == null
-                ? salesNoteRepository.findAll()
-                : salesNoteRepository.findByNoteDateGreaterThanEqualAndNoteDateLessThan(
+                ? salesNoteRepository.findAllByOrderByNoteDateDescIdDesc()
+                : salesNoteRepository.findByNoteDateGreaterThanEqualAndNoteDateLessThanOrderByNoteDateDescIdDesc(
                         period.fromDate(),
                         period.toDate());
-        return notes
-                .stream()
-                .map(note -> findById(note.getId()))
-                .toList();
+        return loadResponses(notes);
     }
 
     @Transactional(readOnly = true)
@@ -142,11 +159,14 @@ public class SalesNoteService {
     public SalesNoteResponse update(Long id, UpdateSalesNoteRequest request) {
         SalesNote salesNote = salesNoteRepository.findById(id)
                 .orElseThrow(() -> new SalesNoteException("Sales note not found: " + id));
+        SalesNoteResponse previous = findById(id);
         if (salesNote.getStatus() == SalesNoteStatus.CANCELLED) {
             throw new SalesNoteException("Cancelled sales notes cannot be edited");
         }
         if (request.customerName() != null && !request.customerName().isBlank()) {
-            salesNote.setCustomerName(normalizeCustomerName(request.customerName()));
+            String customerName = normalizeCustomerName(request.customerName());
+            salesNote.setCustomerId(findOrCreateCustomer(customerName).getId());
+            salesNote.setCustomerName(customerName);
         }
         if (request.noteDate() != null) {
             salesNote.setNoteDate(request.noteDate());
@@ -156,13 +176,16 @@ public class SalesNoteService {
             salesNote.setUtilityAmount(request.utilityAmount());
         }
         salesNoteRepository.save(salesNote);
-        return findById(id);
+        SalesNoteResponse response = findById(id);
+        auditLogService.record(AuditAction.UPDATE, "SALES_NOTE", id, previous, response);
+        return response;
     }
 
     @Transactional
     public SalesNoteResponse cancel(Long id) {
         SalesNote salesNote = salesNoteRepository.findById(id)
                 .orElseThrow(() -> new SalesNoteException("Sales note not found: " + id));
+        SalesNoteResponse previous = findById(id);
         if (salesNote.getStatus() == SalesNoteStatus.CANCELLED) {
             throw new SalesNoteException("Sales note is already cancelled");
         }
@@ -179,7 +202,9 @@ public class SalesNoteService {
 
         salesNote.setStatus(SalesNoteStatus.CANCELLED);
         salesNoteRepository.save(salesNote);
-        return findById(id);
+        SalesNoteResponse response = findById(id);
+        auditLogService.record(AuditAction.CANCEL, "SALES_NOTE", id, previous, response);
+        return response;
     }
 
     private void registerDeliveredCylinder(
@@ -197,6 +222,7 @@ public class SalesNoteService {
         deliveredLine.setOriginWarehouseId(warehouse.getId());
         deliveredLine.setCapacityM3(line.capacityM3() == null ? cylinder.getCapacityM3() : line.capacityM3());
         deliveredLine.setOwnerName(ownerNameOrCylinderOwner(line.ownerName(), cylinder));
+        deliveredLine.setAmount(line.amount());
         deliveredLine.setObservations(line.observations());
         deliveredRepository.save(deliveredLine);
 
@@ -210,6 +236,8 @@ public class SalesNoteService {
         movement.setDestinationLocationType(CylinderLocationType.CLIENTE);
         movement.setDestinationCustomerName(salesNote.getCustomerName());
         movement.setMovementDate(salesNote.getNoteDate().toLocalDate());
+        movement.setMovementAt(salesNote.getNoteDate());
+        movement.setAmount(line.amount());
         movement.setNotes(line.observations());
         movement.setSourceType(sourceType);
         movementRepository.save(movement);
@@ -253,6 +281,7 @@ public class SalesNoteService {
         movement.setDestinationWarehouseId(warehouse.getId());
         movement.setDestinationLocationType(CylinderLocationType.PLANTA);
         movement.setMovementDate(salesNote.getNoteDate().toLocalDate());
+        movement.setMovementAt(salesNote.getNoteDate());
         movement.setNotes(line.observations());
         movement.setSourceType(sourceType);
         movementRepository.save(movement);
@@ -286,6 +315,7 @@ public class SalesNoteService {
         movement.setDestinationWarehouseId(warehouse.getId());
         movement.setDestinationLocationType(CylinderLocationType.PLANTA);
         movement.setMovementDate(salesNote.getNoteDate().toLocalDate());
+        movement.setMovementAt(LocalDateTime.now());
         movement.setNotes("Anulacion de nota " + salesNote.getNoteNumber());
         movement.setSourceType(SalesNoteSourceType.SYSTEM);
         movementRepository.save(movement);
@@ -318,6 +348,7 @@ public class SalesNoteService {
         movement.setDestinationLocationType(CylinderLocationType.CLIENTE);
         movement.setDestinationCustomerName(line.getOriginCustomerName());
         movement.setMovementDate(salesNote.getNoteDate().toLocalDate());
+        movement.setMovementAt(LocalDateTime.now());
         movement.setNotes("Anulacion de nota " + salesNote.getNoteNumber());
         movement.setSourceType(SalesNoteSourceType.SYSTEM);
         movementRepository.save(movement);
@@ -381,6 +412,24 @@ public class SalesNoteService {
         return value == null ? BigDecimal.ZERO : value;
     }
 
+    private BigDecimal totalAmount(List<CreateSalesNoteRequest.DeliveredCylinderRequest> delivered) {
+        return delivered.stream()
+                .map(CreateSalesNoteRequest.DeliveredCylinderRequest::amount)
+                .filter(value -> value != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private Customer findOrCreateCustomer(String customerName) {
+        String normalizedName = normalizeCustomerName(customerName);
+        return customerRepository.findByNormalizedName(normalizedName)
+                .orElseGet(() -> {
+                    Customer customer = new Customer();
+                    customer.setName(normalizedName);
+                    customer.setNormalizedName(normalizedName);
+                    return customerRepository.save(customer);
+                });
+    }
+
     private String ownerNameOrCylinderOwner(String ownerName, Cylinder cylinder) {
         if (ownerName != null && !ownerName.isBlank()) {
             return ownerName.trim();
@@ -397,6 +446,44 @@ public class SalesNoteService {
             return false;
         }
         return currentCustomerName.trim().equalsIgnoreCase(requestedCustomerName.trim());
+    }
+
+    private AuditSourceType auditSourceType(SalesNoteSourceType sourceType) {
+        return switch (sourceType) {
+            case USER -> AuditSourceType.USER;
+            case SCRIPT -> AuditSourceType.IMPORT;
+            case SYSTEM -> AuditSourceType.SYSTEM;
+        };
+    }
+
+    private List<SalesNoteResponse> loadResponses(List<SalesNote> notes) {
+        if (notes.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> noteIds = notes.stream().map(SalesNote::getId).toList();
+        List<SalesNoteDeliveredCylinder> delivered = deliveredRepository.findBySalesNoteIdIn(noteIds);
+        List<SalesNoteCollectedCylinder> collected = collectedRepository.findBySalesNoteIdIn(noteIds);
+        List<InventoryMovement> movements = movementRepository.findBySalesNoteIdIn(noteIds);
+
+        Map<Long, List<SalesNoteDeliveredCylinder>> deliveredByNote = delivered.stream()
+                .collect(Collectors.groupingBy(SalesNoteDeliveredCylinder::getSalesNoteId));
+        Map<Long, List<SalesNoteCollectedCylinder>> collectedByNote = collected.stream()
+                .collect(Collectors.groupingBy(SalesNoteCollectedCylinder::getSalesNoteId));
+        Map<Long, List<InventoryMovement>> movementsByNote = movements.stream()
+                .collect(Collectors.groupingBy(InventoryMovement::getSalesNoteId));
+        Map<Long, Cylinder> cylinders = loadCylinders(delivered, collected, movements);
+        Map<Long, Product> products = loadProducts(delivered, collected, movements);
+
+        return notes.stream()
+                .map(note -> SalesNoteResponse.from(
+                        note,
+                        deliveredByNote.getOrDefault(note.getId(), List.of()),
+                        collectedByNote.getOrDefault(note.getId(), List.of()),
+                        movementsByNote.getOrDefault(note.getId(), List.of()),
+                        cylinders,
+                        products))
+                .toList();
     }
 
     private Map<Long, Cylinder> loadCylinders(

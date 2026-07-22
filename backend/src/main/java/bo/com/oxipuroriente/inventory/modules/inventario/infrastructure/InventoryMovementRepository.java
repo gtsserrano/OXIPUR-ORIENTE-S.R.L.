@@ -1,5 +1,6 @@
 package bo.com.oxipuroriente.inventory.modules.inventario.infrastructure;
 
+import java.util.Collection;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -11,6 +12,8 @@ import bo.com.oxipuroriente.inventory.modules.inventario.domain.InventoryMovemen
 public interface InventoryMovementRepository extends JpaRepository<InventoryMovement, Long> {
 
     List<InventoryMovement> findBySalesNoteId(Long salesNoteId);
+
+    List<InventoryMovement> findBySalesNoteIdIn(Collection<Long> salesNoteIds);
 
     List<InventoryMovement> findByCylinderId(Long cylinderId);
 

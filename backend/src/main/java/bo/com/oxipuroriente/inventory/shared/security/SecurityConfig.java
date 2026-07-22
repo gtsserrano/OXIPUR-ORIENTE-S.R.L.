@@ -47,6 +47,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/status", "/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.PATCH, "/api/profiles/*/activity", "/api/profiles/*/offline").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/profiles/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/audit-logs/**").hasRole("ADMINISTRADOR")
                         .requestMatchers(HttpMethod.GET, "/api/utilities/**").hasRole("ADMINISTRADOR")
                         .requestMatchers(HttpMethod.POST, "/api/profiles/**").hasRole("ADMINISTRADOR")
                         .requestMatchers(HttpMethod.PUT, "/api/profiles/**").hasRole("ADMINISTRADOR")

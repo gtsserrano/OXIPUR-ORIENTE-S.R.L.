@@ -10,6 +10,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import bo.com.oxipuroriente.inventory.modules.auditoria.application.AuditLogService;
+import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditAction;
 import bo.com.oxipuroriente.inventory.modules.iam.application.PasswordService;
 import bo.com.oxipuroriente.inventory.modules.iam.domain.UserRole;
 import bo.com.oxipuroriente.inventory.modules.iam.security.CurrentUser;
@@ -28,11 +30,17 @@ public class UserProfileService {
     private final UserProfileRepository repository;
     private final PasswordService passwordService;
     private final CurrentUser currentUser;
+    private final AuditLogService auditLogService;
 
-    public UserProfileService(UserProfileRepository repository, PasswordService passwordService, CurrentUser currentUser) {
+    public UserProfileService(
+            UserProfileRepository repository,
+            PasswordService passwordService,
+            CurrentUser currentUser,
+            AuditLogService auditLogService) {
         this.repository = repository;
         this.passwordService = passwordService;
         this.currentUser = currentUser;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -57,7 +65,9 @@ public class UserProfileService {
         profile.setLastActivityAt(now);
         profile.setOnlineUntil(now.plus(ONLINE_WINDOW));
 
-        return UserProfileResponse.from(repository.save(profile), Instant.now());
+        UserProfileResponse response = UserProfileResponse.from(repository.save(profile), Instant.now());
+        auditLogService.record(AuditAction.CREATE, "USER_PROFILE", response.id(), null, response);
+        return response;
     }
 
     public String hashPassword(String password) {
@@ -77,6 +87,7 @@ public class UserProfileService {
     public UserProfileResponse update(Long id, UpdateUserProfileRequest request) {
         UserProfile profile = repository.findById(id)
                 .orElseThrow(() -> new UserProfileNotFoundException(id));
+        UserProfileResponse previous = UserProfileResponse.from(profile, Instant.now());
         String fullName = request.fullName().trim();
         String username = usernameOrDefault(request.username(), fullName);
         UserRole requestedRole = UserRole.from(request.roleName());
@@ -98,7 +109,9 @@ public class UserProfileService {
         }
         profile.setActive(requestedActive);
 
-        return UserProfileResponse.from(repository.save(profile), Instant.now());
+        UserProfileResponse response = UserProfileResponse.from(repository.save(profile), Instant.now());
+        auditLogService.record(AuditAction.UPDATE, "USER_PROFILE", id, previous, response);
+        return response;
     }
 
     @Transactional
@@ -108,10 +121,11 @@ public class UserProfileService {
                 .ifPresent(user -> {
                     throw new AccessDeniedException("cannot_delete_own_profile");
                 });
-        if (!repository.existsById(id)) {
-            throw new UserProfileNotFoundException(id);
-        }
-        repository.deleteById(id);
+        UserProfile profile = repository.findById(id)
+                .orElseThrow(() -> new UserProfileNotFoundException(id));
+        UserProfileResponse previous = UserProfileResponse.from(profile, Instant.now());
+        repository.delete(profile);
+        auditLogService.record(AuditAction.DELETE, "USER_PROFILE", id, previous, null);
     }
 
     @Transactional

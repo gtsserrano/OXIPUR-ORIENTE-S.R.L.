@@ -19,11 +19,17 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import bo.com.oxipuroriente.inventory.modules.almacenes.domain.Warehouse;
 import bo.com.oxipuroriente.inventory.modules.almacenes.infrastructure.WarehouseRepository;
+import bo.com.oxipuroriente.inventory.modules.auditoria.infrastructure.AuditLogRepository;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.Cylinder;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderLocationType;
 import bo.com.oxipuroriente.inventory.modules.cilindros.infrastructure.CylinderRepository;
+import bo.com.oxipuroriente.inventory.modules.clientes.infrastructure.CustomerRepository;
+import bo.com.oxipuroriente.inventory.modules.inventario.infrastructure.InventoryMovementRepository;
 import bo.com.oxipuroriente.inventory.modules.productos.domain.Product;
 import bo.com.oxipuroriente.inventory.modules.productos.infrastructure.ProductRepository;
+import bo.com.oxipuroriente.inventory.modules.ventas.infrastructure.SalesNoteCollectedCylinderRepository;
+import bo.com.oxipuroriente.inventory.modules.ventas.infrastructure.SalesNoteDeliveredCylinderRepository;
+import bo.com.oxipuroriente.inventory.modules.ventas.infrastructure.SalesNoteRepository;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -47,6 +53,24 @@ class SalesNoteControllerTests {
 
     @Autowired
     private WarehouseRepository warehouseRepository;
+
+    @Autowired
+    private SalesNoteRepository salesNoteRepository;
+
+    @Autowired
+    private SalesNoteDeliveredCylinderRepository deliveredCylinderRepository;
+
+    @Autowired
+    private SalesNoteCollectedCylinderRepository collectedCylinderRepository;
+
+    @Autowired
+    private InventoryMovementRepository movementRepository;
+
+    @Autowired
+    private CustomerRepository customerRepository;
+
+    @Autowired
+    private AuditLogRepository auditLogRepository;
 
     @Test
     void createsSalesNoteWithDeliveredCylinderAndGeneratesMovement() throws Exception {
@@ -151,6 +175,57 @@ class SalesNoteControllerTests {
                 """.formatted(next("NV-MIX"), delivered.getId(), product.getId(), collected.getId()));
 
         assertThat(response.get("movements").size()).isEqualTo(2);
+    }
+
+    @Test
+    void persistsEveryRelatedTableWhenCreatingMixedSalesNote() throws Exception {
+        Warehouse warehouse = mainWarehouse();
+        Product product = createProduct();
+        Cylinder delivered = createCylinderInPlant(warehouse.getId());
+        Cylinder collected = createCylinderInCustomer("Cliente Persistencia");
+        String customerName = next("CLIENTE-PERSISTENCIA");
+
+        long notesBefore = salesNoteRepository.count();
+        long deliveredBefore = deliveredCylinderRepository.count();
+        long collectedBefore = collectedCylinderRepository.count();
+        long movementsBefore = movementRepository.count();
+        long customersBefore = customerRepository.count();
+        long auditsBefore = auditLogRepository.count();
+
+        postSalesNote("""
+                {
+                  "noteNumber": "%s",
+                  "customerName": "%s",
+                  "noteDate": "2026-07-21T12:30:00",
+                  "deliveredCylinders": [
+                    {
+                      "cylinderId": %d,
+                      "productId": %d,
+                      "amount": 95.00
+                    }
+                  ],
+                  "collectedCylinders": [
+                    {
+                      "cylinderId": %d,
+                      "productId": %d,
+                      "observations": "RECIBIDO VACIO"
+                    }
+                  ]
+                }
+                """.formatted(
+                next("NV-PERSIST"),
+                customerName,
+                delivered.getId(),
+                product.getId(),
+                collected.getId(),
+                product.getId()));
+
+        assertThat(salesNoteRepository.count()).isEqualTo(notesBefore + 1);
+        assertThat(deliveredCylinderRepository.count()).isEqualTo(deliveredBefore + 1);
+        assertThat(collectedCylinderRepository.count()).isEqualTo(collectedBefore + 1);
+        assertThat(movementRepository.count()).isEqualTo(movementsBefore + 2);
+        assertThat(customerRepository.count()).isEqualTo(customersBefore + 1);
+        assertThat(auditLogRepository.count()).isEqualTo(auditsBefore + 1);
     }
 
     @Test
@@ -353,7 +428,7 @@ class SalesNoteControllerTests {
     }
 
     @Test
-    void summarizesUtilitiesAndExcludesCancelledNotes() throws Exception {
+    void summarizesSalesRevenueAndExcludesCancelledNotes() throws Exception {
         Warehouse warehouse = mainWarehouse();
         Product product = createProduct();
         Cylinder registered = createCylinderInPlant(warehouse.getId());
@@ -369,7 +444,8 @@ class SalesNoteControllerTests {
                   "deliveredCylinders": [
                     {
                       "cylinderId": %d,
-                      "productId": %d
+                      "productId": %d,
+                      "amount": 125.50
                     }
                   ]
                 }
@@ -383,7 +459,8 @@ class SalesNoteControllerTests {
                   "deliveredCylinders": [
                     {
                       "cylinderId": %d,
-                      "productId": %d
+                      "productId": %d,
+                      "amount": 70.00
                     }
                   ]
                 }
@@ -397,7 +474,8 @@ class SalesNoteControllerTests {
                   "deliveredCylinders": [
                     {
                       "cylinderId": %d,
-                      "productId": %d
+                      "productId": %d,
+                      "amount": 30.00
                     }
                   ]
                 }
@@ -410,11 +488,11 @@ class SalesNoteControllerTests {
         JsonNode byMonth = getJson("/api/utilities/summary?dateFilterType=MONTH&year=2028&month=8");
         JsonNode byYear = getJson("/api/utilities/summary?dateFilterType=YEAR&year=2028");
 
-        assertThat(total.get("totalUtility").decimalValue()).isGreaterThanOrEqualTo(new BigDecimal("155.50"));
-        assertThat(byDay.get("totalUtility").decimalValue()).isEqualByComparingTo(new BigDecimal("125.50"));
+        assertThat(total.get("totalRevenue").decimalValue()).isGreaterThanOrEqualTo(new BigDecimal("155.50"));
+        assertThat(byDay.get("totalRevenue").decimalValue()).isEqualByComparingTo(new BigDecimal("125.50"));
         assertThat(byDay.get("salesNotesCount").asLong()).isEqualTo(1);
-        assertThat(byMonth.get("totalUtility").decimalValue()).isEqualByComparingTo(new BigDecimal("125.50"));
-        assertThat(byYear.get("totalUtility").decimalValue()).isEqualByComparingTo(new BigDecimal("155.50"));
+        assertThat(byMonth.get("totalRevenue").decimalValue()).isEqualByComparingTo(new BigDecimal("125.50"));
+        assertThat(byYear.get("totalRevenue").decimalValue()).isEqualByComparingTo(new BigDecimal("155.50"));
     }
 
     @Test

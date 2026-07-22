@@ -885,3 +885,351 @@ databaseChangeLog:
               - column:
                   name: updated_at
                   valueComputed: CURRENT_TIMESTAMP
+  - changeSet:
+      id: 026-normalize-customers-and-sales-note-amounts
+      author: codex
+      changes:
+        - createTable:
+            tableName: customers
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(160)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: normalized_name
+                  type: VARCHAR(160)
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: customers
+            indexName: idx_customers_name
+            columns:
+              - column:
+                  name: name
+        - sql:
+            sql: INSERT INTO customers (name, normalized_name, active, created_at, updated_at) SELECT DISTINCT UPPER(TRIM(s.customer_name)), UPPER(TRIM(s.customer_name)), TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM sales_notes s WHERE s.customer_name IS NOT NULL AND TRIM(s.customer_name) <> '' AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.normalized_name = UPPER(TRIM(s.customer_name)))
+        - sql:
+            sql: INSERT INTO customers (name, normalized_name, active, created_at, updated_at) SELECT DISTINCT UPPER(TRIM(cy.current_customer_name)), UPPER(TRIM(cy.current_customer_name)), TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM cylinders cy WHERE cy.current_customer_name IS NOT NULL AND TRIM(cy.current_customer_name) <> '' AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.normalized_name = UPPER(TRIM(cy.current_customer_name)))
+        - sql:
+            sql: INSERT INTO customers (name, normalized_name, active, created_at, updated_at) SELECT DISTINCT UPPER(TRIM(m.origin_customer_name)), UPPER(TRIM(m.origin_customer_name)), TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM inventory_movements m WHERE m.origin_customer_name IS NOT NULL AND TRIM(m.origin_customer_name) <> '' AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.normalized_name = UPPER(TRIM(m.origin_customer_name)))
+        - sql:
+            sql: INSERT INTO customers (name, normalized_name, active, created_at, updated_at) SELECT DISTINCT UPPER(TRIM(m.destination_customer_name)), UPPER(TRIM(m.destination_customer_name)), TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP FROM inventory_movements m WHERE m.destination_customer_name IS NOT NULL AND TRIM(m.destination_customer_name) <> '' AND NOT EXISTS (SELECT 1 FROM customers c WHERE c.normalized_name = UPPER(TRIM(m.destination_customer_name)))
+        - addColumn:
+            tableName: sales_notes
+            columns:
+              - column:
+                  name: customer_id
+                  type: BIGINT
+              - column:
+                  name: total_amount
+                  type: DECIMAL(14,2)
+                  defaultValueNumeric: 0.00
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source_reference
+                  type: VARCHAR(255)
+              - column:
+                  name: source_date_text
+                  type: VARCHAR(40)
+        - sql:
+            sql: UPDATE sales_notes s SET customer_id = (SELECT c.id FROM customers c WHERE c.normalized_name = UPPER(TRIM(s.customer_name))) WHERE s.customer_id IS NULL
+        - addNotNullConstraint:
+            tableName: sales_notes
+            columnName: customer_id
+            columnDataType: BIGINT
+        - addForeignKeyConstraint:
+            baseTableName: sales_notes
+            baseColumnNames: customer_id
+            referencedTableName: customers
+            referencedColumnNames: id
+            constraintName: fk_sales_notes_customer
+        - createIndex:
+            tableName: sales_notes
+            indexName: idx_sales_notes_customer_id
+            columns:
+              - column:
+                  name: customer_id
+        - addColumn:
+            tableName: sales_note_delivered_cylinders
+            columns:
+              - column:
+                  name: amount
+                  type: DECIMAL(12,2)
+              - column:
+                  name: source_row_number
+                  type: INTEGER
+        - addColumn:
+            tableName: sales_note_collected_cylinders
+            columns:
+              - column:
+                  name: source_row_number
+                  type: INTEGER
+        - addColumn:
+            tableName: inventory_movements
+            columns:
+              - column:
+                  name: amount
+                  type: DECIMAL(12,2)
+              - column:
+                  name: movement_at
+                  type: TIMESTAMP
+              - column:
+                  name: source_row_number
+                  type: INTEGER
+        - sql:
+            sql: UPDATE inventory_movements SET movement_at = movement_date WHERE movement_at IS NULL
+        - addUniqueConstraint:
+            tableName: sales_note_delivered_cylinders
+            columnNames: sales_note_id, source_row_number
+            constraintName: uq_sales_note_delivered_source_row
+        - addUniqueConstraint:
+            tableName: sales_note_collected_cylinders
+            columnNames: sales_note_id, source_row_number
+            constraintName: uq_sales_note_collected_source_row
+        - addUniqueConstraint:
+            tableName: inventory_movements
+            columnNames: sales_note_id, source_row_number
+            constraintName: uq_inventory_movements_source_row
+        - createIndex:
+            tableName: inventory_movements
+            indexName: idx_inventory_movements_movement_at
+            columns:
+              - column:
+                  name: movement_at
+  - changeSet:
+      id: 027-import-historical-sales-note-details-20260721
+      author: codex
+      dbms: mysql
+      changes:
+        - createTable:
+            tableName: historical_sales_note_rows_20260721
+            columns:
+              - column:
+                  name: source_row_number
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+                    primaryKey: true
+              - column:
+                  name: note_number
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: note_date
+                  type: VARCHAR(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: source_date_text
+                  type: VARCHAR(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: serial_number
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: capacity_m3
+                  type: VARCHAR(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: product_code
+                  type: VARCHAR(60)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: product_name
+                  type: VARCHAR(120)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: owner_name
+                  type: VARCHAR(160)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: customer_name
+                  type: VARCHAR(160)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: movement_state
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: amount
+                  type: VARCHAR(30)
+              - column:
+                  name: observations
+                  type: VARCHAR(255)
+        - loadData:
+            file: data/027_historical_sales_note_rows_20260721.csv
+            relativeToChangelogFile: true
+            tableName: historical_sales_note_rows_20260721
+            encoding: UTF-8
+            separator: ','
+            quotchar: '"'
+        - sqlFile:
+            path: 027_import_historical_sales_notes.sql
+            relativeToChangelogFile: true
+            splitStatements: true
+            stripComments: true
+        - dropTable:
+            tableName: historical_sales_note_rows_20260721
+  - changeSet:
+      id: 028-create-audit-logs
+      author: codex
+      changes:
+        - createTable:
+            tableName: audit_logs
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: actor_user_id
+                  type: BIGINT
+              - column:
+                  name: actor_username
+                  type: VARCHAR(80)
+              - column:
+                  name: entity_type
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: entity_id
+                  type: VARCHAR(80)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: action
+                  type: VARCHAR(40)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: previous_data
+                  type: CLOB
+              - column:
+                  name: new_data
+                  type: CLOB
+              - column:
+                  name: source_type
+                  type: VARCHAR(40)
+                  defaultValue: USER
+                  constraints:
+                    nullable: false
+              - column:
+                  name: request_method
+                  type: VARCHAR(10)
+              - column:
+                  name: request_path
+                  type: VARCHAR(255)
+              - column:
+                  name: ip_address
+                  type: VARCHAR(45)
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: audit_logs
+            baseColumnNames: actor_user_id
+            referencedTableName: user_profiles
+            referencedColumnNames: id
+            constraintName: fk_audit_logs_actor_user
+            onDelete: SET NULL
+        - createIndex:
+            tableName: audit_logs
+            indexName: idx_audit_logs_created_at
+            columns:
+              - column:
+                  name: created_at
+        - createIndex:
+            tableName: audit_logs
+            indexName: idx_audit_logs_actor_user
+            columns:
+              - column:
+                  name: actor_user_id
+        - createIndex:
+            tableName: audit_logs
+            indexName: idx_audit_logs_entity
+            columns:
+              - column:
+                  name: entity_type
+              - column:
+                  name: entity_id
+  - changeSet:
+      id: 029-audit-historical-sales-note-import
+      author: codex
+      dbms: mysql
+      changes:
+        - insert:
+            tableName: audit_logs
+            columns:
+              - column:
+                  name: entity_type
+                  value: HISTORICAL_MOVEMENT_IMPORT
+              - column:
+                  name: entity_id
+                  value: 2026-07-21
+              - column:
+                  name: action
+                  value: IMPORT
+              - column:
+                  name: new_data
+                  value: '{"source":"oxipur_detallemovimientos_2026-07-21 (2).xlsx","movements":9045,"salesNotes":6761,"delivered":5678,"received":3367}'
+              - column:
+                  name: source_type
+                  value: IMPORT
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+  - changeSet:
+      id: 030-normalize-historical-import-audit-id
+      author: codex
+      dbms: mysql
+      changes:
+        - update:
+            tableName: audit_logs
+            columns:
+              - column:
+                  name: entity_id
+                  value: "2026-07-21"
+            where: entity_type = 'HISTORICAL_MOVEMENT_IMPORT' AND action = 'IMPORT' AND source_type = 'IMPORT'

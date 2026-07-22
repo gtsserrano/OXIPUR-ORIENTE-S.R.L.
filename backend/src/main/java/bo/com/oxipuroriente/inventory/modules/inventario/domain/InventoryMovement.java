@@ -1,7 +1,9 @@
 package bo.com.oxipuroriente.inventory.modules.inventario.domain;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderLocationType;
 import bo.com.oxipuroriente.inventory.modules.ventas.domain.SalesNoteSourceType;
@@ -58,6 +60,15 @@ public class InventoryMovement {
 
     @Column(name = "movement_date", nullable = false)
     private LocalDate movementDate;
+
+    @Column(name = "movement_at")
+    private LocalDateTime movementAt;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal amount;
+
+    @Column(name = "source_row_number")
+    private Integer sourceRowNumber;
 
     @Column(length = 255, name = "notes")
     private String notes;
@@ -162,6 +173,30 @@ public class InventoryMovement {
 
     public void setMovementDate(LocalDate movementDate) {
         this.movementDate = movementDate;
+    }
+
+    public LocalDateTime getMovementAt() {
+        return movementAt;
+    }
+
+    public void setMovementAt(LocalDateTime movementAt) {
+        this.movementAt = movementAt;
+    }
+
+    public BigDecimal getAmount() {
+        return amount;
+    }
+
+    public void setAmount(BigDecimal amount) {
+        this.amount = amount;
+    }
+
+    public Integer getSourceRowNumber() {
+        return sourceRowNumber;
+    }
+
+    public void setSourceRowNumber(Integer sourceRowNumber) {
+        this.sourceRowNumber = sourceRowNumber;
     }
 
     public String getNotes() {

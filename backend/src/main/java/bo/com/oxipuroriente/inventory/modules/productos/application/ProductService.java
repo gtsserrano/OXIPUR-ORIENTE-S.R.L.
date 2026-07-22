@@ -5,6 +5,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import bo.com.oxipuroriente.inventory.modules.auditoria.application.AuditLogService;
+import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditAction;
 import bo.com.oxipuroriente.inventory.modules.productos.domain.Product;
 import bo.com.oxipuroriente.inventory.modules.productos.infrastructure.ProductRepository;
 import bo.com.oxipuroriente.inventory.modules.productos.presentation.CreateProductRequest;
@@ -15,9 +17,11 @@ import bo.com.oxipuroriente.inventory.modules.productos.presentation.UpdateProdu
 public class ProductService {
 
     private final ProductRepository repository;
+    private final AuditLogService auditLogService;
 
-    public ProductService(ProductRepository repository) {
+    public ProductService(ProductRepository repository, AuditLogService auditLogService) {
         this.repository = repository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -32,7 +36,9 @@ public class ProductService {
         product.setDescription(request.description());
         product.setActive(request.active() == null || request.active());
 
-        return ProductResponse.from(repository.save(product));
+        ProductResponse response = ProductResponse.from(repository.save(product));
+        auditLogService.record(AuditAction.CREATE, "PRODUCT", response.id(), null, response);
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -52,6 +58,7 @@ public class ProductService {
     @Transactional
     public ProductResponse update(Long id, UpdateProductRequest request) {
         Product product = findProduct(id);
+        ProductResponse previous = ProductResponse.from(product);
 
         if (request.code() != null && !request.code().isBlank()) {
             if (repository.existsByCodeAndIdNot(request.code(), id)) {
@@ -69,14 +76,18 @@ public class ProductService {
             product.setActive(request.active());
         }
 
-        return ProductResponse.from(repository.save(product));
+        ProductResponse response = ProductResponse.from(repository.save(product));
+        auditLogService.record(AuditAction.UPDATE, "PRODUCT", id, previous, response);
+        return response;
     }
 
     @Transactional
     public void delete(Long id) {
         Product product = findProduct(id);
+        ProductResponse previous = ProductResponse.from(product);
         product.setActive(false);
-        repository.save(product);
+        ProductResponse response = ProductResponse.from(repository.save(product));
+        auditLogService.record(AuditAction.DEACTIVATE, "PRODUCT", id, previous, response);
     }
 
     private Product findProduct(Long id) {

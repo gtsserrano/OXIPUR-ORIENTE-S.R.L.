@@ -40,6 +40,9 @@ public class SalesNoteCollectedCylinder {
     @Column(name = "owner_name", nullable = false, length = 160)
     private String ownerName;
 
+    @Column(name = "source_row_number")
+    private Integer sourceRowNumber;
+
     @Column(length = 255)
     private String observations;
 
@@ -112,6 +115,14 @@ public class SalesNoteCollectedCylinder {
 
     public void setOwnerName(String ownerName) {
         this.ownerName = ownerName;
+    }
+
+    public Integer getSourceRowNumber() {
+        return sourceRowNumber;
+    }
+
+    public void setSourceRowNumber(Integer sourceRowNumber) {
+        this.sourceRowNumber = sourceRowNumber;
     }
 
     public Instant getCreatedAt() {

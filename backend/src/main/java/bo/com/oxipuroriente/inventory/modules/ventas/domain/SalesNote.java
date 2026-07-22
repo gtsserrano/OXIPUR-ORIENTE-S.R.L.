@@ -26,6 +26,9 @@ public class SalesNote {
     @Column(name = "note_number", nullable = false, unique = true, length = 80)
     private String noteNumber;
 
+    @Column(name = "customer_id", nullable = false)
+    private Long customerId;
+
     @Column(name = "customer_name", nullable = false, length = 160)
     private String customerName;
 
@@ -37,6 +40,15 @@ public class SalesNote {
 
     @Column(name = "utility_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal utilityAmount = BigDecimal.ZERO;
+
+    @Column(name = "total_amount", nullable = false, precision = 14, scale = 2)
+    private BigDecimal totalAmount = BigDecimal.ZERO;
+
+    @Column(name = "source_reference", length = 255)
+    private String sourceReference;
+
+    @Column(name = "source_date_text", length = 40)
+    private String sourceDateText;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 40)
@@ -62,6 +74,14 @@ public class SalesNote {
 
     public void setNoteNumber(String noteNumber) {
         this.noteNumber = noteNumber;
+    }
+
+    public Long getCustomerId() {
+        return customerId;
+    }
+
+    public void setCustomerId(Long customerId) {
+        this.customerId = customerId;
     }
 
     public String getCustomerName() {
@@ -94,6 +114,30 @@ public class SalesNote {
 
     public void setUtilityAmount(BigDecimal utilityAmount) {
         this.utilityAmount = utilityAmount == null ? BigDecimal.ZERO : utilityAmount;
+    }
+
+    public BigDecimal getTotalAmount() {
+        return totalAmount;
+    }
+
+    public void setTotalAmount(BigDecimal totalAmount) {
+        this.totalAmount = totalAmount == null ? BigDecimal.ZERO : totalAmount;
+    }
+
+    public String getSourceReference() {
+        return sourceReference;
+    }
+
+    public void setSourceReference(String sourceReference) {
+        this.sourceReference = sourceReference;
+    }
+
+    public String getSourceDateText() {
+        return sourceDateText;
+    }
+
+    public void setSourceDateText(String sourceDateText) {
+        this.sourceDateText = sourceDateText;
     }
 
     public SalesNoteStatus getStatus() {

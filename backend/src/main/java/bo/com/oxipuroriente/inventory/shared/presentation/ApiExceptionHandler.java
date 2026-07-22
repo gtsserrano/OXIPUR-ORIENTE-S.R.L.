@@ -13,6 +13,8 @@ import bo.com.oxipuroriente.inventory.modules.almacenes.application.DuplicateWar
 import bo.com.oxipuroriente.inventory.modules.almacenes.application.WarehouseNotFoundException;
 import bo.com.oxipuroriente.inventory.modules.cilindros.application.CylinderNotFoundException;
 import bo.com.oxipuroriente.inventory.modules.cilindros.application.DuplicateCylinderSerialNumberException;
+import bo.com.oxipuroriente.inventory.modules.clientes.application.CustomerNotFoundException;
+import bo.com.oxipuroriente.inventory.modules.clientes.application.DuplicateCustomerNameException;
 import bo.com.oxipuroriente.inventory.modules.iam.application.IamAuthenticationException;
 import bo.com.oxipuroriente.inventory.modules.iam.application.InvalidUserRoleException;
 import bo.com.oxipuroriente.inventory.modules.perfiles.application.DuplicateUserProfileException;
@@ -67,6 +69,11 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", exception.getMessage()));
     }
 
+    @ExceptionHandler(DuplicateCustomerNameException.class)
+    public ResponseEntity<Map<String, String>> handleDuplicateCustomerName(DuplicateCustomerNameException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", exception.getMessage()));
+    }
+
     @ExceptionHandler(DuplicateUserProfileException.class)
     public ResponseEntity<Map<String, String>> handleDuplicateUserProfile(DuplicateUserProfileException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", exception.getMessage()));
@@ -84,6 +91,11 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(ProductNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleProductNotFound(ProductNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", exception.getMessage()));
+    }
+
+    @ExceptionHandler(CustomerNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleCustomerNotFound(CustomerNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", exception.getMessage()));
     }
 

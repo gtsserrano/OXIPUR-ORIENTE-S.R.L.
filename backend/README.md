@@ -47,12 +47,13 @@ Este backend vive dentro de la carpeta `backend` del proyecto.
 ## Arranque
 
 El proyecto incluye Maven Wrapper, por lo que solo necesitas Java instalado.
-Para ejecutar la aplicacion:
+Para ejecutar la aplicacion operativa contra la base MySQL configurada en el archivo `.env` del proyecto:
 
 ```powershell
-cd backend
-.\mvnw.cmd spring-boot:run
+.\start-mysql.ps1
 ```
+
+El comando `mvnw spring-boot:run` sin el perfil `mysql` utiliza H2 en memoria y se reserva para pruebas.
 
 Endpoint de prueba:
 
@@ -86,7 +87,22 @@ $env:MYSQL_PASSWORD="tu_password"
 Tambien puedes personalizar toda la conexion:
 
 ```powershell
-$env:MYSQL_URL="jdbc:mysql://localhost:3306/oxipur_inventory?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+$env:MYSQL_URL="jdbc:mysql://localhost:3306/oxipur_inventory?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/La_Paz"
 $env:MYSQL_USER="root"
 $env:MYSQL_PASSWORD="tu_password"
 ```
+
+Al iniciar con el perfil `mysql`, Liquibase crea o actualiza las mismas tablas que se observan en MySQL Workbench. La migracion historica de notas del 21/07/2026 se ejecuta una sola vez y deja su registro en `DATABASECHANGELOG`.
+
+Tablas principales del flujo:
+
+- `user_profiles`: usuarios y acceso.
+- `customers`: catalogo normalizado de clientes.
+- `sales_notes`: cabecera de cada nota de venta.
+- `sales_note_delivered_cylinders`: cilindros entregados y monto por linea.
+- `sales_note_collected_cylinders`: cilindros recibidos vacios.
+- `inventory_movements`: trazabilidad de cada entrada y salida.
+- `audit_logs`: historial inmutable de acciones sensibles, visible solo para administradores.
+
+La auditoria se consulta mediante `GET /api/audit-logs`. Permite filtrar por `entityType` y
+`entityId`, y devuelve resultados paginados con un maximo de 200 registros por pagina.

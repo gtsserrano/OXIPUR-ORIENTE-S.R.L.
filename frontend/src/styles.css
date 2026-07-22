@@ -581,7 +581,6 @@ button {
 
 .workspace {
   position: relative;
-  z-index: 1;
   padding: 36px;
 }
 
@@ -1001,7 +1000,7 @@ button {
 }
 
 .deliveredLine {
-  grid-template-columns: minmax(140px, 0.8fr) minmax(160px, 1fr) 120px minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(150px, 1fr) 110px 110px minmax(160px, 1fr) minmax(160px, 1fr) auto;
 }
 
 .collectedLine {
@@ -1329,6 +1328,40 @@ td {
 
 td {
   font-size: 14px;
+}
+
+.compactTableGrid {
+  width: 100%;
+  min-width: 928px;
+}
+
+.compactTableRow {
+  display: grid;
+  grid-template-columns: 118px minmax(260px, 1fr) 165px 120px 125px 140px;
+  width: 100%;
+  min-width: 100%;
+  align-items: center;
+  min-height: 40px;
+  border-bottom: 1px solid var(--line);
+}
+
+.compactTableHeader {
+  height: 36px;
+  min-height: 36px;
+  background: #eef6fb;
+  color: #41536b;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.compactTableCell {
+  padding: 0 12px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.compactTable [role="rowgroup"] .compactTableRow:last-child {
+  border-bottom: 0;
 }
 
 tr:last-child td {

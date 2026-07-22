@@ -1,6 +1,8 @@
 package bo.com.oxipuroriente.inventory.modules.inventario.presentation;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderLocationType;
 import bo.com.oxipuroriente.inventory.modules.inventario.domain.InventoryMovement;
@@ -20,6 +22,8 @@ public record InventoryMovementResponse(
         String originCustomerName,
         String destinationCustomerName,
         LocalDate movementDate,
+        LocalDateTime movementAt,
+        BigDecimal amount,
         String notes,
         SalesNoteSourceType sourceType) {
 
@@ -37,6 +41,8 @@ public record InventoryMovementResponse(
                 movement.getOriginCustomerName(),
                 movement.getDestinationCustomerName(),
                 movement.getMovementDate(),
+                movement.getMovementAt(),
+                movement.getAmount(),
                 movement.getNotes(),
                 movement.getSourceType());
     }

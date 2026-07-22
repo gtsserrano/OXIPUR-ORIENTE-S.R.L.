@@ -5,6 +5,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import bo.com.oxipuroriente.inventory.modules.auditoria.application.AuditLogService;
+import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditAction;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.Cylinder;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderLocationType;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderOwnerType;
@@ -17,9 +19,11 @@ import bo.com.oxipuroriente.inventory.modules.cilindros.presentation.UpdateCylin
 public class CylinderService {
 
     private final CylinderRepository repository;
+    private final AuditLogService auditLogService;
 
-    public CylinderService(CylinderRepository repository) {
+    public CylinderService(CylinderRepository repository, AuditLogService auditLogService) {
         this.repository = repository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -37,7 +41,9 @@ public class CylinderService {
         cylinder.setOwnerType(request.ownerType() == null ? CylinderOwnerType.COMPANY : request.ownerType());
         cylinder.setCurrentLocationType(CylinderLocationType.PLANTA);
 
-        return CylinderResponse.from(repository.save(cylinder));
+        CylinderResponse response = CylinderResponse.from(repository.save(cylinder));
+        auditLogService.record(AuditAction.CREATE, "CYLINDER", response.id(), null, response);
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -57,6 +63,7 @@ public class CylinderService {
     @Transactional
     public CylinderResponse update(Long id, UpdateCylinderRequest request) {
         Cylinder cylinder = findCylinder(id);
+        CylinderResponse previous = CylinderResponse.from(cylinder);
 
         if (request.serialNumber() != null && !request.serialNumber().isBlank()) {
             if (repository.existsBySerialNumberAndIdNot(request.serialNumber(), id)) {
@@ -80,14 +87,18 @@ public class CylinderService {
             cylinder.setOwnerType(request.ownerType());
         }
 
-        return CylinderResponse.from(repository.save(cylinder));
+        CylinderResponse response = CylinderResponse.from(repository.save(cylinder));
+        auditLogService.record(AuditAction.UPDATE, "CYLINDER", id, previous, response);
+        return response;
     }
 
     @Transactional
     public void delete(Long id) {
         Cylinder cylinder = findCylinder(id);
+        CylinderResponse previous = CylinderResponse.from(cylinder);
         cylinder.setActive(false);
-        repository.save(cylinder);
+        CylinderResponse response = CylinderResponse.from(repository.save(cylinder));
+        auditLogService.record(AuditAction.DEACTIVATE, "CYLINDER", id, previous, response);
     }
 
     private Cylinder findCylinder(Long id) {

@@ -23,7 +23,7 @@ public class UtilitySummaryService {
 
     @Transactional(readOnly = true)
     public UtilitySummaryResponse summarize(DatePeriod period) {
-        BigDecimal totalUtility = salesNoteRepository.sumUtilityAmount(
+        BigDecimal totalRevenue = salesNoteRepository.sumTotalAmount(
                 SalesNoteStatus.REGISTERED,
                 period == null ? null : period.fromDate(),
                 period == null ? null : period.toDate());
@@ -33,7 +33,7 @@ public class UtilitySummaryService {
                 period == null ? null : period.toDate());
 
         return new UtilitySummaryResponse(
-                totalUtility,
+                totalRevenue,
                 CURRENCY,
                 period == null ? null : period.dateFilterType(),
                 period == null ? null : period.fromDate(),

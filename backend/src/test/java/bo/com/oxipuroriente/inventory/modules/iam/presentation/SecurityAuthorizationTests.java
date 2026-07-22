@@ -104,6 +104,24 @@ class SecurityAuthorizationTests {
     }
 
     @Test
+    void deniesOperatorReadingAuditLogs() throws Exception {
+        String token = loginToken(createProfile("OPERADOR"));
+
+        mockMvc.perform(get("/api/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void allowsAdministratorReadingAuditLogs() throws Exception {
+        String token = loginToken(createProfile("ADMINISTRADOR"));
+
+        mockMvc.perform(get("/api/audit-logs")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void allowsOperatorReadingProfileActivity() throws Exception {
         String token = loginToken(createProfile("OPERADOR"));
 

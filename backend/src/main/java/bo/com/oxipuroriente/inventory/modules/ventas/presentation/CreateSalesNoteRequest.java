@@ -25,6 +25,8 @@ public record CreateSalesNoteRequest(
             @NotNull Long productId,
             @DecimalMin(value = "0.01")
             BigDecimal capacityM3,
+            @DecimalMin(value = "0.00")
+            BigDecimal amount,
             String ownerName,
             String observations) {
     }

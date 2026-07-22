@@ -5,6 +5,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import bo.com.oxipuroriente.inventory.modules.auditoria.application.AuditLogService;
+import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditAction;
 import bo.com.oxipuroriente.inventory.modules.almacenes.domain.Warehouse;
 import bo.com.oxipuroriente.inventory.modules.almacenes.infrastructure.WarehouseRepository;
 import bo.com.oxipuroriente.inventory.modules.almacenes.presentation.CreateWarehouseRequest;
@@ -15,9 +17,11 @@ import bo.com.oxipuroriente.inventory.modules.almacenes.presentation.WarehouseRe
 public class WarehouseService {
 
     private final WarehouseRepository repository;
+    private final AuditLogService auditLogService;
 
-    public WarehouseService(WarehouseRepository repository) {
+    public WarehouseService(WarehouseRepository repository, AuditLogService auditLogService) {
         this.repository = repository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -32,7 +36,9 @@ public class WarehouseService {
         warehouse.setAddress(request.address());
         warehouse.setActive(request.active() == null || request.active());
 
-        return WarehouseResponse.from(repository.save(warehouse));
+        WarehouseResponse response = WarehouseResponse.from(repository.save(warehouse));
+        auditLogService.record(AuditAction.CREATE, "WAREHOUSE", response.id(), null, response);
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -51,6 +57,7 @@ public class WarehouseService {
     @Transactional
     public WarehouseResponse update(Long id, UpdateWarehouseRequest request) {
         Warehouse warehouse = findWarehouse(id);
+        WarehouseResponse previous = WarehouseResponse.from(warehouse);
 
         if (request.code() != null && !request.code().isBlank()) {
             if (repository.existsByCodeAndIdNot(request.code(), id)) {
@@ -68,7 +75,9 @@ public class WarehouseService {
             warehouse.setActive(request.active());
         }
 
-        return WarehouseResponse.from(repository.save(warehouse));
+        WarehouseResponse response = WarehouseResponse.from(repository.save(warehouse));
+        auditLogService.record(AuditAction.UPDATE, "WAREHOUSE", id, previous, response);
+        return response;
     }
 
     private Warehouse findWarehouse(Long id) {

@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 import bo.com.oxipuroriente.inventory.shared.application.DateFilterType;
 
 public record UtilitySummaryResponse(
-        BigDecimal totalUtility,
+        BigDecimal totalRevenue,
         String currency,
         DateFilterType dateFilterType,
         LocalDateTime fromDate,

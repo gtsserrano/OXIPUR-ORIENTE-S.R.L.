@@ -20,10 +20,12 @@ import bo.com.oxipuroriente.inventory.modules.ventas.domain.SalesNoteStatus;
 public record SalesNoteResponse(
         Long id,
         String noteNumber,
+        Long customerId,
         String customerName,
         LocalDateTime noteDate,
         String observations,
         BigDecimal utilityAmount,
+        BigDecimal totalAmount,
         SalesNoteStatus status,
         SalesNoteSourceType sourceType,
         List<DeliveredCylinderLineResponse> deliveredCylinders,
@@ -40,10 +42,12 @@ public record SalesNoteResponse(
         return new SalesNoteResponse(
                 salesNote.getId(),
                 salesNote.getNoteNumber(),
+                salesNote.getCustomerId(),
                 salesNote.getCustomerName(),
                 salesNote.getNoteDate(),
                 salesNote.getObservations(),
                 salesNote.getUtilityAmount(),
+                salesNote.getTotalAmount(),
                 salesNote.getStatus(),
                 salesNote.getSourceType(),
                 delivered.stream().map(line -> DeliveredCylinderLineResponse.from(line, cylinders, products)).toList(),
@@ -60,6 +64,7 @@ public record SalesNoteResponse(
             Long originWarehouseId,
             BigDecimal capacityM3,
             String ownerName,
+            BigDecimal amount,
             String observations) {
 
         static DeliveredCylinderLineResponse from(
@@ -77,6 +82,7 @@ public record SalesNoteResponse(
                     line.getOriginWarehouseId(),
                     line.getCapacityM3(),
                     line.getOwnerName(),
+                    line.getAmount(),
                     line.getObservations());
         }
     }
@@ -124,6 +130,8 @@ public record SalesNoteResponse(
             String originCustomerName,
             String destinationCustomerName,
             LocalDate movementDate,
+            LocalDateTime movementAt,
+            BigDecimal amount,
             String notes,
             SalesNoteSourceType sourceType) {
 
@@ -141,6 +149,8 @@ public record SalesNoteResponse(
                     movement.getOriginCustomerName(),
                     movement.getDestinationCustomerName(),
                     movement.getMovementDate(),
+                    movement.getMovementAt(),
+                    movement.getAmount(),
                     movement.getNotes(),
                     movement.getSourceType());
         }

@@ -13,7 +13,6 @@ import {
   Eye,
   Gauge,
   LayoutDashboard,
-  LogOut,
   Banknote,
   Package,
   Plus,
@@ -39,7 +38,6 @@ const PROFILE_REFRESH_MS = 30000;
 const PROFILE_EDITOR_CLOSE_MS = 180;
 const CYLINDER_EDITOR_CLOSE_MS = 180;
 const DETAIL_MODAL_CLOSE_MS = 180;
-const LOGOUT_CONFIRM_CLOSE_MS = 180;
 const SALE_NOTE_TEMPLATE_URL = "/formato-nota-entrega.pdf";
 const SALE_NOTE_TEMPLATE_PAGE_INDEX = 1;
 const SALE_NOTE_ROWS_PER_PAGE = 16;
@@ -68,7 +66,6 @@ const navItems = [
 const PERMISSIONS = {
   MANAGE_CATALOGS: "MANAGE_CATALOGS",
   MANAGE_PROFILES: "MANAGE_PROFILES",
-  VIEW_PROFILE_ACTIVITY: "VIEW_PROFILE_ACTIVITY",
   VIEW_UTILITIES: "VIEW_UTILITIES"
 };
 
@@ -76,18 +73,16 @@ const ROLE_PERMISSIONS = {
   ADMINISTRADOR: new Set([
     PERMISSIONS.MANAGE_CATALOGS,
     PERMISSIONS.MANAGE_PROFILES,
-    PERMISSIONS.VIEW_PROFILE_ACTIVITY,
     PERMISSIONS.VIEW_UTILITIES
   ]),
-  OPERADOR: new Set([
-    PERMISSIONS.VIEW_PROFILE_ACTIVITY
-  ])
+  OPERADOR: new Set()
 };
 
 const PAGE_PERMISSIONS = {
   utilities: PERMISSIONS.VIEW_UTILITIES,
+  cylinders: PERMISSIONS.MANAGE_CATALOGS,
   products: PERMISSIONS.MANAGE_CATALOGS,
-  profiles: PERMISSIONS.VIEW_PROFILE_ACTIVITY
+  profiles: PERMISSIONS.MANAGE_PROFILES
 };
 
 const monthOptions = [
@@ -105,7 +100,7 @@ const monthOptions = [
   { value: 12, label: "Diciembre" }
 ];
 
-const emptyDeliveredLine = { cylinderNumber: "", productId: "", capacityM3: "", ownerName: "", observations: "" };
+const emptyDeliveredLine = { cylinderNumber: "", productId: "", capacityM3: "", amount: "", ownerName: "", observations: "" };
 const emptyCollectedLine = { cylinderNumber: "", productId: "", capacityM3: "", ownerName: "", observations: "" };
 const emptyLoginForm = { username: "", password: "" };
 
@@ -133,7 +128,7 @@ const emptyForm = {
     id: null,
     noteNumber: "",
     customerName: "",
-    noteDate: new Date().toISOString().slice(0, 16),
+    noteDate: localDateTimeInputValue(),
     observations: "",
     utilityAmount: "",
     deliveredCylinders: [{ ...emptyDeliveredLine }],
@@ -151,6 +146,7 @@ function App() {
   const [state, setState] = useState({
     cylinders: [],
     products: [],
+    customers: [],
     profiles: [],
     inventory: [],
     movements: [],
@@ -166,34 +162,36 @@ function App() {
   const [forms, setForms] = useState(emptyForm);
   const [profileEditorClosing, setProfileEditorClosing] = useState(false);
   const [cylinderEditorClosing, setCylinderEditorClosing] = useState(false);
-  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
-  const [logoutConfirmClosing, setLogoutConfirmClosing] = useState(false);
-  const [salesDateFilter, setSalesDateFilter] = useState(createDateFilter());
-  const [movementDateFilter, setMovementDateFilter] = useState(createDateFilter());
-  const [utilityDateFilter, setUtilityDateFilter] = useState(createDateFilter());
+  const [salesDateFilter, setSalesDateFilter] = useState(createDateFilter("MONTH"));
+  const [movementDateFilter, setMovementDateFilter] = useState(createDateFilter("MONTH"));
+  const [utilityDateFilter, setUtilityDateFilter] = useState(createDateFilter("MONTH"));
   const [selectedPrintNoteId, setSelectedPrintNoteId] = useState("");
   const visibleNavItems = useMemo(() => filterNavItemsForSession(navItems, session), [session?.profile?.roleName]);
-  const canManageProfiles = hasPermission(session, PERMISSIONS.MANAGE_PROFILES);
-  const canViewProfileActivity = hasPermission(session, PERMISSIONS.VIEW_PROFILE_ACTIVITY);
 
   async function loadAll() {
     setState((value) => ({ ...value, loading: true }));
     try {
+      const canManageProfiles = hasPermission(session, PERMISSIONS.MANAGE_PROFILES);
       const canViewUtilities = hasPermission(session, PERMISSIONS.VIEW_UTILITIES);
-      const [cylinders, products, inventory, movements, salesNotes, operationalAlerts, profiles, utilitiesSummary] = await Promise.all([
+      const salesDateQuery = buildDateQuery(salesDateFilter);
+      const movementDateQuery = buildDateQuery(movementDateFilter);
+      const utilityDateQuery = buildDateQuery(utilityDateFilter);
+      const [cylinders, products, customers, inventory, movements, salesNotes, operationalAlerts, profiles, utilitiesSummary] = await Promise.all([
         api("/api/cylinders"),
         api("/api/products"),
+        api("/api/customers"),
         api("/api/inventory/cylinders"),
-        api("/api/inventory-movements"),
-        api("/api/sales-notes"),
+        api(`/api/inventory-movements${movementDateQuery}`),
+        api(`/api/sales-notes${salesDateQuery}`),
         api("/api/operational-alerts"),
-        canViewProfileActivity ? api("/api/profiles") : Promise.resolve([]),
-        canViewUtilities ? api("/api/utilities/summary") : Promise.resolve(null)
+        canManageProfiles ? api("/api/profiles") : Promise.resolve([]),
+        canViewUtilities ? api(`/api/utilities/summary${utilityDateQuery}`) : Promise.resolve(null)
       ]);
       setState((value) => ({
         ...value,
         cylinders,
         products,
+        customers,
         profiles,
         inventory,
         movements,
@@ -220,8 +218,6 @@ function App() {
       setSession(null);
       setWelcomeVisible(false);
       setActive("dashboard");
-      setLogoutConfirmOpen(false);
-      setLogoutConfirmClosing(false);
       setState((value) => ({ ...value, loading: false, message: "" }));
     }
 
@@ -241,8 +237,6 @@ function App() {
       setActive("dashboard");
       setLoginForm(emptyLoginForm);
       setLoginError("Sesión finalizada por inactividad. Ingresa nuevamente.");
-      setLogoutConfirmOpen(false);
-      setLogoutConfirmClosing(false);
       setState((value) => ({ ...value, loading: false, message: "" }));
     }
 
@@ -277,6 +271,7 @@ function App() {
   useEffect(() => {
     if (!session?.profile?.id) return undefined;
     let cancelled = false;
+    const canManageProfiles = hasPermission(session, PERMISSIONS.MANAGE_PROFILES);
 
     async function markCurrentProfileActive(refreshProfiles = false) {
       try {
@@ -292,7 +287,7 @@ function App() {
           ...value,
           profiles: value.profiles.map((profile) => (profile.id === updated.id ? updated : profile))
         }));
-        if (refreshProfiles && canViewProfileActivity) {
+        if (refreshProfiles && canManageProfiles) {
           const profiles = await api("/api/profiles");
           if (!cancelled) {
             setState((value) => ({ ...value, profiles }));
@@ -304,7 +299,7 @@ function App() {
     }
 
     async function refreshProfilePresence() {
-      if (!canViewProfileActivity) return;
+      if (!canManageProfiles) return;
       try {
         const profiles = await api("/api/profiles");
         if (!cancelled) {
@@ -317,7 +312,7 @@ function App() {
 
     markCurrentProfileActive(true);
     const heartbeat = window.setInterval(() => markCurrentProfileActive(false), PRESENCE_HEARTBEAT_MS);
-    const profileRefresh = canViewProfileActivity ? window.setInterval(refreshProfilePresence, PROFILE_REFRESH_MS) : null;
+    const profileRefresh = canManageProfiles ? window.setInterval(refreshProfilePresence, PROFILE_REFRESH_MS) : null;
     const handleFocus = () => markCurrentProfileActive(true);
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -495,8 +490,6 @@ function App() {
     event.preventDefault();
     setLoginLoading(true);
     setLoginError("");
-    localStorage.removeItem(SESSION_KEY);
-    localStorage.removeItem(LAST_ACTIVITY_KEY);
     try {
       const nextSession = await api("/api/iam/login", {
         method: "POST",
@@ -523,35 +516,11 @@ function App() {
     setSession(null);
     setWelcomeVisible(false);
     setActive("dashboard");
-    setLogoutConfirmOpen(false);
-    setLogoutConfirmClosing(false);
     setState((value) => ({ ...value, loading: true, message: "" }));
   }
 
-  function openLogoutConfirm() {
-    setLogoutConfirmClosing(false);
-    setLogoutConfirmOpen(true);
-  }
-
-  function closeLogoutConfirm() {
-    setLogoutConfirmClosing(true);
-    window.setTimeout(() => {
-      setLogoutConfirmOpen(false);
-      setLogoutConfirmClosing(false);
-    }, LOGOUT_CONFIRM_CLOSE_MS);
-  }
-
-  function confirmLogout() {
-    setLogoutConfirmClosing(true);
-    window.setTimeout(() => {
-      setLogoutConfirmOpen(false);
-      setLogoutConfirmClosing(false);
-      logout();
-    }, LOGOUT_CONFIRM_CLOSE_MS);
-  }
-
   async function loadProfiles() {
-    if (!hasPermission(session, PERMISSIONS.VIEW_PROFILE_ACTIVITY)) return;
+    if (!hasPermission(session, PERMISSIONS.MANAGE_PROFILES)) return;
     const profiles = await api("/api/profiles");
     setState((value) => ({ ...value, profiles }));
   }
@@ -597,6 +566,7 @@ function App() {
           cylinderId: cylinder?.id,
           productId: Number(line.productId),
           capacityM3: line.capacityM3 === "" ? cylinder?.capacityM3 ?? null : Number(line.capacityM3),
+          amount: line.amount === "" ? null : Number(line.amount),
           ownerName: line.ownerName || saleCylinderOwnerName(cylinder) || null,
           observations: line.observations || null
         };
@@ -754,7 +724,7 @@ function App() {
         id: note.id,
         noteNumber: note.noteNumber,
         customerName: note.customerName,
-        noteDate: note.noteDate?.slice(0, 16) || new Date().toISOString().slice(0, 16),
+        noteDate: note.noteDate?.slice(0, 16) || localDateTimeInputValue(),
         observations: note.observations || "",
         utilityAmount: note.utilityAmount ?? "",
         deliveredCylinders: [{ ...emptyDeliveredLine }],
@@ -816,7 +786,7 @@ function App() {
         cylinders={state.cylinders}
       />
     ),
-    clients: <ClientsView initialInventory={state.inventory} />,
+    clients: <ClientsView customers={state.customers} initialInventory={state.inventory} />,
     "sales-create": (
       <SalesView
         mode="create"
@@ -863,7 +833,7 @@ function App() {
     ),
     cylinders: <CylindersView forms={forms} setForms={setForms} createCylinder={createCylinder} updateCylinder={updateCylinder} cylinders={state.cylinders} editCylinder={editCylinder} closeCylinderEditor={closeCylinderEditor} cylinderEditorClosing={cylinderEditorClosing} deleteCylinder={deleteCylinder} />,
     products: <ProductsView forms={forms} setForms={setForms} createProduct={createProduct} products={state.products} editProduct={editProduct} deleteProduct={deleteProduct} />,
-    profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} updateProfile={updateProfile} profiles={state.profiles} loadProfiles={loadProfiles} editProfile={editProfile} closeProfileEditor={closeProfileEditor} profileEditorClosing={profileEditorClosing} deleteProfile={deleteProfile} canManageProfiles={canManageProfiles} />,
+    profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} updateProfile={updateProfile} profiles={state.profiles} loadProfiles={loadProfiles} editProfile={editProfile} closeProfileEditor={closeProfileEditor} profileEditorClosing={profileEditorClosing} deleteProfile={deleteProfile} />,
     printing: <PrintingView salesNotes={state.salesNotes} selectedPrintNoteId={selectedPrintNoteId} setSelectedPrintNoteId={setSelectedPrintNoteId} printSaleNote={printSaleNote} />,
     profile: <ProfileView session={session} />
   }[pageKey];
@@ -874,19 +844,12 @@ function App() {
     <div className="appShell">
       <Sidebar active={pageKey} setActive={setActive} navItems={visibleNavItems} />
       <main className="mainPane">
-        <Topbar title={activeMeta.label} session={session} onLogoutRequest={openLogoutConfirm} />
+        <Topbar title={activeMeta.label} session={session} onLogout={logout} />
         <section className="workspace">
           {state.message && <div className="toast">{state.message}</div>}
           {state.loading ? <Skeleton /> : page}
         </section>
       </main>
-      {logoutConfirmOpen && (
-        <LogoutConfirmModal
-          closing={logoutConfirmClosing}
-          onCancel={closeLogoutConfirm}
-          onConfirm={confirmLogout}
-        />
-      )}
     </div>
   );
 }
@@ -1009,7 +972,7 @@ function normalizeRoleName(roleName) {
   return normalized === "ADMIN" ? "ADMINISTRADOR" : normalized;
 }
 
-function Topbar({ title, session, onLogoutRequest }) {
+function Topbar({ title, session, onLogout }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const profile = session?.profile;
   const displayName = profile?.fullName || profile?.username || "Perfil";
@@ -1051,33 +1014,9 @@ function Topbar({ title, session, onLogoutRequest }) {
             </div>
           </div>
         </div>
-        <button className="logout" type="button" onClick={onLogoutRequest}>Cerrar sesion</button>
+        <button className="logout" type="button" onClick={onLogout}>Salir</button>
       </div>
     </header>
-  );
-}
-
-function LogoutConfirmModal({ closing, onCancel, onConfirm }) {
-  return (
-    <div className={`modalOverlay ${closing ? "closing" : "open"}`} onMouseDown={onCancel}>
-      <section className="logoutConfirmModal" role="dialog" aria-modal="true" aria-labelledby="logoutConfirmTitle" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="logoutConfirmHeader">
-          <div className="logoutConfirmIcon">
-            <LogOut size={20} />
-          </div>
-          <div>
-            <span>SESION</span>
-            <h3 id="logoutConfirmTitle">Cerrar sesion</h3>
-          </div>
-          <IconButton title="Cerrar" onClick={onCancel} icon={X} />
-        </div>
-        <p>Deseas cerrar la sesion actual?</p>
-        <div className="logoutConfirmActions">
-          <button type="button" className="secondaryBtn" onClick={onCancel}>Cancelar</button>
-          <button type="button" className="primaryBtn logoutConfirmDangerBtn" onClick={onConfirm}>Cerrar sesion</button>
-        </div>
-      </section>
-    </div>
   );
 }
 
@@ -1260,7 +1199,7 @@ function InventoryView({ filters, setFilters, searchInventory, inventory, cylind
   );
 }
 
-function ClientsView({ initialInventory = [] }) {
+function ClientsView({ customers = [], initialInventory = [] }) {
   const [inventory, setInventory] = useState(initialInventory);
   const [detailClient, setDetailClient] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1307,18 +1246,18 @@ function ClientsView({ initialInventory = [] }) {
     };
   }, []);
 
-  const clients = useMemo(() => buildCustomerGroups(inventory), [inventory]);
+  const clients = useMemo(() => buildCustomerDirectory(customers, inventory), [customers, inventory]);
 
   const totalCylinders = clients.reduce((total, client) => total + client.cylinders.length, 0);
   const totalCapacity = clients.reduce((total, client) => total + client.totalCapacity, 0);
 
   return (
     <>
-      <PageIntro eyebrow="CLIENTES" title="Clientes con cilindros" subtitle="Consulta la posesión actual de cilindros por cliente." />
-      <Card title="Cilindros en posesión de clientes">
+      <PageIntro eyebrow="CLIENTES" title="Clientes" subtitle="Consulta todos los clientes registrados y la posesión actual de cilindros." />
+      <Card title="Directorio de clientes">
         <div className="clientsToolbar">
           <div>
-            <span>Clientes activos</span>
+            <span>Clientes registrados</span>
             <strong>{clients.length}</strong>
           </div>
           <div>
@@ -1381,7 +1320,7 @@ function ClientsView({ initialInventory = [] }) {
             )}
           </>
         ) : (
-          <EmptyState title="Sin clientes con cilindros" text="No hay cilindros ubicados actualmente en clientes." />
+          <EmptyState title="Sin clientes registrados" text="No hay clientes disponibles en la base de datos." />
         )}
       </Card>
     </>
@@ -1390,6 +1329,7 @@ function ClientsView({ initialInventory = [] }) {
 
 function SalesView({ mode = "create", forms, setForms, createSale, cylinders, products, inventory = [], salesNotes, editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes }) {
   const form = forms.sale;
+  const [detailNote, setDetailNote] = useState(null);
   const activeCylinders = cylinders.filter((item) => item.active !== false);
   const activeProducts = products.filter((item) => item.active !== false);
   const showingCreation = mode === "create";
@@ -1503,6 +1443,9 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                         <Field label="Capacidad (m3)">
                           <input type="number" min="0.01" step="0.01" value={line.capacityM3} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "capacityM3", event.target.value)} placeholder={selected ? String(selected.capacityM3) : "0.00"} />
                         </Field>
+                        <Field label="Monto (Bs)">
+                          <input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "amount", event.target.value)} placeholder="0.00" />
+                        </Field>
                         <Field label="Propiedad" className="floatingHintField">
                           {ownershipHint(line.ownerName)}
                           <AutocompleteInput
@@ -1584,24 +1527,61 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
           onClear={searchSalesNotes}
         />
         <DataTable
-          columns={["Número", "Cliente", "Fecha", "Utilidad", "Estado", "Entregados", "Recogidos", "Acciones"]}
+          compact
+          columns={["Número", "Cliente", "Fecha", "Total venta", "Estado", "Acciones"]}
           rows={salesNotes.map((note) => [
             note.noteNumber,
             note.customerName,
             formatDateTime(note.noteDate),
-            money(note.utilityAmount),
-            note.status === "CANCELLED" ? <span className="dangerBadge">ANULADA</span> : "REGISTERED",
-            formatLineSummary(note.deliveredCylinders),
-            formatLineSummary(note.collectedCylinders),
+            money(note.totalAmount),
+            note.status === "CANCELLED" ? <span className="dangerBadge">ANULADA</span> : "REGISTRADO",
             <div className="rowActions">
-              <IconButton title="Ver detalle" onClick={() => showSaleDetail(note)} icon={Eye} />
+              <IconButton title="Ver detalle" onClick={() => setDetailNote(note)} icon={Eye} />
               <IconButton title="Editar datos generales" onClick={() => editSale(note)} icon={Edit3} disabled={note.status === "CANCELLED"} />
               <IconButton title="Anular nota" onClick={() => cancelSale(note)} icon={Trash2} disabled={note.status === "CANCELLED"} />
             </div>
           ])}
           empty="Sin notas registradas"
+          onRowClick={(index) => setDetailNote(salesNotes[index])}
         />
       </Card>
+      )}
+      {detailNote && (
+        <DetailModal eyebrow="NOTA DE VENTA" title={detailNote.noteNumber} onClose={() => setDetailNote(null)}>
+          <div className="detailGrid compact">
+            <div><span>Cliente</span><strong>{detailNote.customerName}</strong></div>
+            <div><span>Fecha</span><strong>{formatDateTime(detailNote.noteDate)}</strong></div>
+            <div><span>Total venta</span><strong>{money(detailNote.totalAmount)}</strong></div>
+            <div><span>Utilidad</span><strong>{money(detailNote.utilityAmount)}</strong></div>
+            <div><span>Estado</span><strong>{detailNote.status === "CANCELLED" ? "ANULADA" : "REGISTRADA"}</strong></div>
+            <div><span>Origen</span><strong>{detailNote.sourceType === "SCRIPT" ? "MIGRACIÓN HISTÓRICA" : detailNote.sourceType}</strong></div>
+          </div>
+          <PreviewSection
+            title="Cilindros entregados"
+            empty="La nota no tiene cilindros entregados."
+            columns={["Serie", "Producto", "Capacidad", "Propiedad", "Monto", "Observación"]}
+            rows={(detailNote.deliveredCylinders || []).map((line) => [
+              line.serialNumber || line.cylinderId,
+              line.productName || "-",
+              `${formatCapacity(line.capacityM3)} m3`,
+              line.ownerName || "-",
+              line.amount == null ? "-" : money(line.amount),
+              line.observations || "-"
+            ])}
+          />
+          <PreviewSection
+            title="Cilindros recibidos vacíos"
+            empty="La nota no tiene cilindros recibidos."
+            columns={["Serie", "Producto", "Capacidad", "Propiedad", "Observación"]}
+            rows={(detailNote.collectedCylinders || []).map((line) => [
+              line.serialNumber || line.cylinderId,
+              line.productName || "-",
+              `${formatCapacity(line.capacityM3)} m3`,
+              line.ownerName || "-",
+              line.observations || "-"
+            ])}
+          />
+        </DetailModal>
       )}
     </>
   );
@@ -1611,7 +1591,7 @@ function UtilitiesView({ summary, loading, error, dateFilter, setDateFilter, loa
   const label = periodResultLabel(summary?.dateFilterType);
   return (
     <>
-      <PageIntro eyebrow="UTILIDADES" title="Utilidades" subtitle="Resumen de utilidad generada por notas de venta registradas." />
+      <PageIntro eyebrow="UTILIDADES" title="Utilidades" subtitle="Resumen del monto recaudado por las notas de venta registradas." />
       <Card title="Filtros">
         <DatePeriodFilter
           value={dateFilter}
@@ -1621,7 +1601,7 @@ function UtilitiesView({ summary, loading, error, dateFilter, setDateFilter, loa
         />
       </Card>
       <div className="metricGrid utilityMetrics">
-        <Metric label={label} value={loading ? "..." : money(summary?.totalUtility ?? 0)} icon={Activity} />
+        <Metric label={label} value={loading ? "..." : money(summary?.totalRevenue ?? 0)} icon={Activity} />
         <Metric label="Notas consideradas" value={summary?.salesNotesCount ?? 0} icon={ClipboardList} />
         <Metric label="Moneda" value={summary?.currency || "Bs"} icon={Package} />
       </div>
@@ -1694,6 +1674,7 @@ function SalePreview({ form, cylinders, products }) {
   const collected = previewCollectedLines(form.collectedCylinders, cylinders, products);
   const deliveredCapacity = sumCapacity(delivered);
   const collectedCapacity = sumCapacity(collected);
+  const totalAmount = delivered.reduce((total, line) => total + Number(line.amount || 0), 0);
   return (
     <aside className="salePreview">
       <h3>Vista previa de nota de venta</h3>
@@ -1711,6 +1692,10 @@ function SalePreview({ form, cylinders, products }) {
           <strong>{formatDateTime(form.noteDate) || "-"}</strong>
         </div>
         <div className="previewBlock">
+          <span>Total venta</span>
+          <strong>{money(totalAmount)}</strong>
+        </div>
+        <div className="previewBlock">
           <span>Utilidad</span>
           <strong>{money(moneyInputValue(form.utilityAmount))}</strong>
         </div>
@@ -1722,8 +1707,8 @@ function SalePreview({ form, cylinders, products }) {
       <PreviewSection
         title="Cilindros entregados"
         empty="Aún no se agregaron cilindros entregados."
-        rows={delivered.map((line, index) => [index + 1, line.serialNumber, line.productName, line.capacityM3 ? `${line.capacityM3} m3` : "-", line.ownerName || "-", line.observations || "-"])}
-        columns={["Nro.", "Número de serie", "Producto", "Capacidad (m3)", "Propiedad", "Observación"]}
+        rows={delivered.map((line, index) => [index + 1, line.serialNumber, line.productName, line.capacityM3 ? `${line.capacityM3} m3` : "-", line.ownerName || "-", line.amount === "" || line.amount == null ? "-" : money(line.amount), line.observations || "-"])}
+        columns={["Nro.", "Número de serie", "Producto", "Capacidad (m3)", "Propiedad", "Monto", "Observación"]}
       />
       <PreviewSection
         title="Cilindros recogidos"
@@ -1936,34 +1921,13 @@ function ProductsView({ forms, setForms, createProduct, products, editProduct, d
   );
 }
 
-function ProfilesView({ forms, setForms, createProfile, updateProfile, profiles, loadProfiles, editProfile, closeProfileEditor, profileEditorClosing, deleteProfile, canManageProfiles }) {
+function ProfilesView({ forms, setForms, createProfile, updateProfile, profiles, loadProfiles, editProfile, closeProfileEditor, profileEditorClosing, deleteProfile }) {
   const form = forms.profile;
   const editor = forms.profileEditor;
-  const columns = canManageProfiles
-    ? ["Nombre", "Usuario", "Rol", "Ultima actividad", "Estado", "Acciones"]
-    : ["Nombre", "Usuario", "Rol", "Ultima actividad", "Estado"];
-  const rows = profiles.map((profile) => {
-    const cells = [
-      profile.fullName,
-      profile.username || "-",
-      profile.roleName,
-      formatDateTime(profile.lastActivityAt),
-      profile.online ? <span className="onlineBadge">EN LINEA</span> : <span className="offlineBadge">FUERA DE LINEA</span>
-    ];
-    if (canManageProfiles) {
-      cells.push(
-        <div className="rowActions">
-          <IconButton title="Editar perfil" onClick={() => editProfile(profile)} icon={Edit3} />
-          <IconButton title="Eliminar perfil" onClick={() => deleteProfile(profile)} icon={Trash2} />
-        </div>
-      );
-    }
-    return cells;
-  });
   return (
     <>
-      <PageIntro eyebrow={canManageProfiles ? "ADMIN" : "ACTIVIDAD"} title="Perfiles" subtitle="Actividad reciente de los perfiles del sistema." />
-      {canManageProfiles && <Card title="Nuevo perfil">
+      <PageIntro eyebrow="ADMIN" title="Perfiles" subtitle="Administración de perfiles y actividad reciente." />
+      <Card title="Nuevo perfil">
         <form onSubmit={createProfile}>
           <div className="formGrid five">
             <Field label="Nombre">
@@ -1986,18 +1950,28 @@ function ProfilesView({ forms, setForms, createProfile, updateProfile, profiles,
             </div>
           </div>
         </form>
-      </Card>}
+      </Card>
       <Card title="Actividad de perfiles">
         <div className="actionBar tableActionBar">
           <button type="button" className="secondaryBtn iconTextBtn" onClick={loadProfiles}><RefreshCw size={16} /> Actualizar</button>
         </div>
         <DataTable
-          columns={columns}
-          rows={rows}
+          columns={["Nombre", "Usuario", "Rol", "Última actividad", "Estado", "Acciones"]}
+          rows={profiles.map((profile) => [
+            profile.fullName,
+            profile.username || "-",
+            profile.roleName,
+            formatDateTime(profile.lastActivityAt),
+            profile.online ? <span className="onlineBadge">EN LINEA</span> : <span className="offlineBadge">FUERA DE LINEA</span>,
+            <div className="rowActions">
+              <IconButton title="Editar perfil" onClick={() => editProfile(profile)} icon={Edit3} />
+              <IconButton title="Eliminar perfil" onClick={() => deleteProfile(profile)} icon={Trash2} />
+            </div>
+          ])}
           empty="Sin perfiles registrados"
         />
       </Card>
-      {canManageProfiles && editor.id && (
+      {editor.id && (
         <div className={`modalOverlay ${profileEditorClosing ? "closing" : "open"}`} onMouseDown={closeProfileEditor}>
           <section className="profileEditModal" onMouseDown={(event) => event.stopPropagation()}>
             <div className="modalHeader">
@@ -2192,7 +2166,7 @@ function DetailModal({ eyebrow, title, children, onClose }) {
   );
 }
 
-function DataTable({ columns, rows, empty, onRowClick }) {
+function DataTable({ columns, rows, empty, onRowClick, compact = false }) {
   if (!rows.length) {
     return <EmptyState title="Sin registros" text={empty} />;
   }
@@ -2212,8 +2186,35 @@ function DataTable({ columns, rows, empty, onRowClick }) {
     };
   };
 
+  if (compact) {
+    return (
+      <div className="tableWrap compactTable" role="table">
+        <div className="compactTableGrid">
+          <div className="compactTableRow compactTableHeader" role="row">
+            {columns.map((column) => <div className="compactTableCell" role="columnheader" key={column}>{column}</div>)}
+          </div>
+          <div role="rowgroup">
+            {rows.map((row, index) => {
+              const interactionProps = rowProps(index);
+              return (
+                <div
+                  key={index}
+                  {...interactionProps}
+                  className={`compactTableRow${interactionProps.className ? ` ${interactionProps.className}` : ""}`}
+                  role="row"
+                >
+                  {row.map((cell, cellIndex) => <div className="compactTableCell" role="cell" key={cellIndex}>{cell}</div>)}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="tableWrap">
+    <div className={`tableWrap${compact ? " compactTable" : ""}`}>
       <table>
         <thead>
           <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
@@ -2271,7 +2272,7 @@ function newSaleForm() {
   return {
     ...emptyForm.sale,
     noteNumber: "",
-    noteDate: new Date().toISOString().slice(0, 16),
+    noteDate: localDateTimeInputValue(),
     deliveredCylinders: [{ ...emptyDeliveredLine }],
     collectedCylinders: [{ ...emptyCollectedLine }]
   };
@@ -2309,13 +2310,13 @@ function updateSaleLine(setForms, field, index, key, value, extra = {}) {
 }
 
 function saleLineHasAnyValue(line) {
-  return ["cylinderNumber", "productId", "capacityM3", "ownerName", "observations"].some((key) => String(line?.[key] || "").trim());
+  return ["cylinderNumber", "productId", "capacityM3", "amount", "ownerName", "observations"].some((key) => String(line?.[key] || "").trim());
 }
 
-function createDateFilter() {
+function createDateFilter(dateFilterType = "") {
   const now = new Date();
   return {
-    dateFilterType: "",
+    dateFilterType,
     date: todayDate(),
     month: now.getMonth() + 1,
     year: now.getFullYear()
@@ -2357,6 +2358,7 @@ function previewDeliveredLines(lines, cylinders, products) {
         serialNumber: line.cylinderNumber || cylinder?.serialNumber || "",
         productName: product?.name || "",
         capacityM3: Number(line.capacityM3 || cylinder?.capacityM3 || 0),
+        amount: line.amount,
         ownerName: line.ownerName || saleCylinderOwnerName(cylinder) || "",
         observations: line.observations
       };
@@ -2446,18 +2448,47 @@ function buildCustomerGroups(inventory) {
     .sort((left, right) => left.name.localeCompare(right.name, "es", { sensitivity: "base" }));
 }
 
+function buildCustomerDirectory(customers, inventory) {
+  const possessionGroups = buildCustomerGroups(inventory);
+  const possessionByName = new Map(
+    possessionGroups.map((group) => [normalizeCustomerNameKey(group.name), group])
+  );
+  const directory = new Map();
+
+  (customers || []).forEach((customer) => {
+    const key = normalizeCustomerNameKey(customer.name);
+    const possession = possessionByName.get(key);
+    directory.set(key, {
+      id: customer.id,
+      name: customer.name,
+      active: customer.active !== false,
+      cylinders: possession?.cylinders || [],
+      totalCapacity: possession?.totalCapacity || 0
+    });
+  });
+
+  possessionGroups.forEach((possession) => {
+    const key = normalizeCustomerNameKey(possession.name);
+    if (!directory.has(key)) {
+      directory.set(key, {
+        id: null,
+        name: possession.name,
+        active: true,
+        cylinders: possession.cylinders,
+        totalCapacity: possession.totalCapacity
+      });
+    }
+  });
+
+  return Array.from(directory.values())
+    .sort((left, right) => left.name.localeCompare(right.name, "es", { sensitivity: "base" }));
+}
+
 function formatLineSummary(lines = []) {
   if (!lines.length) return "0";
   return lines
     .map((line) => `${line.serialNumber || line.cylinderId} (${line.capacityM3 || "-"} m3, ${line.ownerName || "sin propiedad"})`)
     .join(", ");
-}
-
-function showSaleDetail(note) {
-  const delivered = formatLineSummary(note.deliveredCylinders);
-  const collected = formatLineSummary(note.collectedCylinders);
-  const movements = (note.movements || []).map((movement) => movement.movementType).join(", ") || "Sin movimientos";
-  window.alert(`Nota ${note.noteNumber}\nEstado: ${note.status}\nCliente: ${note.customerName}\nUtilidad: ${money(note.utilityAmount)}\n\nCilindros entregados: ${delivered}\nCilindros recogidos: ${collected}\n\nMovimientos: ${movements}`);
 }
 
 async function printSaleNote(note) {
@@ -2667,7 +2698,7 @@ function escapeHtml(value) {
 async function api(path, options = {}) {
   const session = readStoredSession();
   const headers = options.body ? { "Content-Type": "application/json" } : {};
-  if (session?.accessToken && path !== "/api/iam/login") {
+  if (session?.accessToken) {
     headers.Authorization = `Bearer ${session.accessToken}`;
   }
   const response = await fetch(path, {
@@ -2731,7 +2762,18 @@ function readErrorMessage(text, status) {
 }
 
 function todayDate() {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function localDateTimeInputValue() {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  return `${todayDate()}T${hours}:${minutes}`;
 }
 
 function formatDateTime(value) {
@@ -2778,10 +2820,10 @@ function formatNumber(value) {
 }
 
 function periodResultLabel(type) {
-  if (type === "DAY") return "Utilidad generada el día seleccionado";
-  if (type === "MONTH") return "Utilidad generada en el mes seleccionado";
-  if (type === "YEAR") return "Utilidad generada en el año seleccionado";
-  return "Utilidad total generada";
+  if (type === "DAY") return "Total recaudado el día seleccionado";
+  if (type === "MONTH") return "Total recaudado en el mes seleccionado";
+  if (type === "YEAR") return "Total recaudado en el año seleccionado";
+  return "Total recaudado";
 }
 
 createRoot(document.getElementById("root")).render(<App />);

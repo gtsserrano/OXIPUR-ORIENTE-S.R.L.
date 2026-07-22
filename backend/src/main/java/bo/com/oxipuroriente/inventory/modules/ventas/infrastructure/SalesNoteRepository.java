@@ -15,18 +15,20 @@ public interface SalesNoteRepository extends JpaRepository<SalesNote, Long> {
 
     boolean existsByNoteNumber(String noteNumber);
 
-    List<SalesNote> findByNoteDateGreaterThanEqualAndNoteDateLessThan(
+    List<SalesNote> findAllByOrderByNoteDateDescIdDesc();
+
+    List<SalesNote> findByNoteDateGreaterThanEqualAndNoteDateLessThanOrderByNoteDateDescIdDesc(
             LocalDateTime fromDate,
             LocalDateTime toDate);
 
     @Query("""
-            select coalesce(sum(s.utilityAmount), 0)
+            select coalesce(sum(s.totalAmount), 0)
             from SalesNote s
             where s.status = :status
               and (:fromDate is null or s.noteDate >= :fromDate)
               and (:toDate is null or s.noteDate < :toDate)
             """)
-    BigDecimal sumUtilityAmount(
+    BigDecimal sumTotalAmount(
             @Param("status") SalesNoteStatus status,
             @Param("fromDate") LocalDateTime fromDate,
             @Param("toDate") LocalDateTime toDate);
