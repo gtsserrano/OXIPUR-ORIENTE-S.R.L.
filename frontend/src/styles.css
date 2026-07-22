@@ -743,6 +743,10 @@ button {
   pointer-events: none;
 }
 
+.autocompleteGhostPrefix {
+  visibility: hidden;
+}
+
 .field input:disabled {
   color: #93a4b5;
   background: #f2f6f9;

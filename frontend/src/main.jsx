@@ -1364,6 +1364,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
     return Array.from(suggestions.values()).sort((left, right) => left.localeCompare(right, "es-BO"));
   }, [customerNameSuggestions, inventory, cylinders]);
   const ownerNameSuggestion = (value) => findOwnerNameSuggestion(ownerNameSuggestions, value);
+  const customerNameSuggestion = findOwnerNameSuggestion(customerNameSuggestions, form.customerName);
   const customerNameKey = normalizeCustomerNameKey(form.customerName);
   const customerExists = customerNameKey ? existingCustomerNames.has(customerNameKey) : false;
   const existingCylinderNumbers = useMemo(() => new Set((cylinders || []).map((cylinder) => normalizeCylinderNumberKey(cylinder.serialNumber)).filter(Boolean)), [cylinders]);
@@ -1415,7 +1416,15 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                     {customerExists ? "Cliente ya existe en el apartado Clientes." : "Cliente no detectado en el apartado Clientes."}
                   </span>
                 )}
-                <input required list="sales-customer-suggestions" value={form.customerName} onChange={(event) => setNested(setForms, "sale", "customerName", uppercaseCustomerName(event.target.value))} placeholder="Cliente" />
+                <AutocompleteInput
+                  required
+                  list="sales-customer-suggestions"
+                  value={form.customerName}
+                  suggestion={customerNameSuggestion}
+                  onChange={(event) => setNested(setForms, "sale", "customerName", uppercaseCustomerName(event.target.value))}
+                  onSuggestionAccept={(suggestion) => setNested(setForms, "sale", "customerName", suggestion)}
+                  placeholder="Cliente"
+                />
                 <datalist id="sales-customer-suggestions">
                   {customerNameSuggestions.map((name) => <option key={name} value={name} />)}
                 </datalist>
@@ -2143,7 +2152,7 @@ function Field({ label, children, className = "" }) {
   );
 }
 
-function AutocompleteInput({ value, suggestion, onChange, onSuggestionAccept, placeholder }) {
+function AutocompleteInput({ value, suggestion, onChange, onSuggestionAccept, placeholder, required = false, list }) {
   const handleKeyDown = (event) => {
     if (!suggestion || !onSuggestionAccept) return;
     if (event.key === "Tab" || event.key === "ArrowRight") {
@@ -2154,12 +2163,19 @@ function AutocompleteInput({ value, suggestion, onChange, onSuggestionAccept, pl
 
   return (
     <div className="autocompleteInput">
-      {suggestion && <span className="autocompleteGhost">{suggestion}</span>}
+      {suggestion && (
+        <span className="autocompleteGhost">
+          <span className="autocompleteGhostPrefix">{value}</span>
+          <span>{suggestion.slice(value.length)}</span>
+        </span>
+      )}
       <input
         value={value}
         onChange={onChange}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
+        required={required}
+        list={list}
         autoComplete="off"
       />
     </div>
