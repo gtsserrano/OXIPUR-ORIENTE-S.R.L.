@@ -1,0 +1,11 @@
+[Unit]
+Description=Run OXIPUR database backup every day
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=oxipur-backup.service
+
+[Install]
+WantedBy=timers.target

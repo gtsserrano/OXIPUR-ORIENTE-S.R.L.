@@ -1,0 +1,12 @@
+target
+.mvn
+mvnw
+mvnw.cmd
+mvnwDebug
+mvnwDebug.cmd
+database
+docs
+storage
+*.log
+*.out
+*.err

@@ -11,6 +11,8 @@ backend/database/backups/*.sql
 *.iml
 
 .env
+.env.production
+*.release.tar.gz
 backend/storage/logs/*
 backend/storage/uploads/*
 !backend/storage/logs/.gitkeep

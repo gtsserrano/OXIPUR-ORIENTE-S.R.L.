@@ -1,0 +1,11 @@
+[Unit]
+Description=OXIPUR MySQL database backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flock --nonblock /run/oxipur-backup.lock /opt/oxipur/deploy/backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
