@@ -118,6 +118,49 @@ class SalesNoteControllerTests {
     }
 
     @Test
+    void detectsAndAssignsNextSalesNoteNumberAutomatically() throws Exception {
+        Warehouse warehouse = mainWarehouse();
+        Product product = createProduct();
+        Cylinder previousCylinder = createCylinderInPlant(warehouse.getId());
+        Cylinder cylinder = createCylinderInPlant(warehouse.getId());
+
+        postSalesNote("""
+                {
+                  "noteNumber": "NV-900000",
+                  "customerName": "Cliente Correlativo Anterior",
+                  "noteDate": "2026-06-02T09:30:00",
+                  "deliveredCylinders": [
+                    {
+                      "cylinderId": %d,
+                      "productId": %d
+                    }
+                  ]
+                }
+                """.formatted(previousCylinder.getId(), product.getId()));
+
+        String expectedNoteNumber = "NV-900001";
+        assertThat(getJson("/api/sales-notes/next-number").get("noteNumber").asText())
+                .isEqualTo(expectedNoteNumber);
+
+        JsonNode response = postSalesNote("""
+                {
+                  "customerName": "Cliente Correlativo",
+                  "noteDate": "2026-06-02T10:30:00",
+                  "deliveredCylinders": [
+                    {
+                      "cylinderId": %d,
+                      "productId": %d
+                    }
+                  ]
+                }
+                """.formatted(cylinder.getId(), product.getId()));
+
+        assertThat(response.get("noteNumber").asText()).isEqualTo(expectedNoteNumber);
+        assertThat(getJson("/api/sales-notes/next-number").get("noteNumber").asText())
+                .isEqualTo(incrementNoteNumber(expectedNoteNumber));
+    }
+
+    @Test
     void createsSalesNoteWithCollectedCylinderAndGeneratesMovement() throws Exception {
         Warehouse warehouse = mainWarehouse();
         Product product = createProduct();
@@ -800,6 +843,11 @@ class SalesNoteControllerTests {
             }
         }
         return false;
+    }
+
+    private String incrementNoteNumber(String noteNumber) {
+        long value = Long.parseLong(noteNumber.substring("NV-".length()));
+        return "NV-%06d".formatted(value + 1);
     }
 
     private Warehouse mainWarehouse() {

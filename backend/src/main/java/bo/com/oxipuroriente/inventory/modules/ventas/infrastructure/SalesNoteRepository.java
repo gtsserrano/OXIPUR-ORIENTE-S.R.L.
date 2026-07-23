@@ -15,6 +15,9 @@ public interface SalesNoteRepository extends JpaRepository<SalesNote, Long> {
 
     boolean existsByNoteNumber(String noteNumber);
 
+    @Query("select s.noteNumber from SalesNote s")
+    List<String> findAllNoteNumbers();
+
     List<SalesNote> findAllByOrderByNoteDateDescIdDesc();
 
     List<SalesNote> findByNoteDateGreaterThanEqualAndNoteDateLessThanOrderByNoteDateDescIdDesc(

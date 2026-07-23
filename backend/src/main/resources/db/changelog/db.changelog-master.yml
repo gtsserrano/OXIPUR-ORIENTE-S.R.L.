@@ -1321,3 +1321,31 @@ databaseChangeLog:
             encoding: UTF-8
             splitStatements: true
             stripComments: true
+  - changeSet:
+      id: 033-create-sales-note-number-sequence
+      author: codex
+      changes:
+        - createTable:
+            tableName: sales_note_number_sequence
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: current_value
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+        - insert:
+            tableName: sales_note_number_sequence
+            columns:
+              - column:
+                  name: id
+                  valueNumeric: 1
+              - column:
+                  name: current_value
+                  valueNumeric: 0

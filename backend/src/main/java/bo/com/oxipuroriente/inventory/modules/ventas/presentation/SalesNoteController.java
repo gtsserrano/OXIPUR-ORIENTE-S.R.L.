@@ -55,6 +55,11 @@ public class SalesNoteController {
         return service.findAll(DatePeriodFactory.from(dateFilterType, date, year, month));
     }
 
+    @GetMapping("/next-number")
+    public NextSalesNoteNumberResponse nextNumber() {
+        return new NextSalesNoteNumberResponse(service.nextNoteNumber());
+    }
+
     @GetMapping(value = "/movements.xlsx", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     public ResponseEntity<byte[]> exportMovements(
             @RequestParam(required = false) DateFilterType dateFilterType,

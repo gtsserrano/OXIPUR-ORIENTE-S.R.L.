@@ -214,6 +214,11 @@ function App() {
   }, [session?.accessToken]);
 
   useEffect(() => {
+    if (!session || active !== "sales-create" || forms.sale.id) return;
+    loadNextSalesNoteNumber().catch((error) => notify(error.message));
+  }, [session?.accessToken, active, forms.sale.id]);
+
+  useEffect(() => {
     function handleAuthExpired() {
       localStorage.removeItem(LAST_ACTIVITY_KEY);
       setSession(null);
@@ -363,6 +368,14 @@ function App() {
   async function searchSalesNotes(nextFilter = salesDateFilter) {
     const salesNotes = await api(`/api/sales-notes${buildDateQuery(nextFilter)}`);
     setState((value) => ({ ...value, salesNotes }));
+  }
+
+  async function loadNextSalesNoteNumber() {
+    const response = await api("/api/sales-notes/next-number");
+    setForms((value) => {
+      if (value.sale.id) return value;
+      return { ...value, sale: { ...value.sale, noteNumber: response.noteNumber } };
+    });
   }
 
   async function searchMovements(nextFilter = movementDateFilter) {
@@ -601,7 +614,7 @@ function App() {
       await api("/api/sales-notes", {
         method: "POST",
         body: {
-          noteNumber: form.noteNumber,
+          noteNumber: null,
           customerName: uppercaseCustomerName(form.customerName),
           noteDate: form.noteDate,
           observations: form.observations || null,
@@ -611,7 +624,8 @@ function App() {
         }
       });
       setForms((value) => ({ ...value, sale: newSaleForm() }));
-        await loadAll();
+      await loadAll();
+      await loadNextSalesNoteNumber();
       await loadUtilities(utilityDateFilter);
       notify("Nota de venta registrada.");
     });
@@ -1408,7 +1422,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
           <form onSubmit={createSale}>
             <div className="formGrid five">
               <Field label="Número">
-                <input required disabled={Boolean(form.id)} value={form.noteNumber} onChange={(event) => setNested(setForms, "sale", "noteNumber", event.target.value)} placeholder="NV-001" />
+                <input required disabled value={form.noteNumber} placeholder="Se asignará automáticamente" />
               </Field>
               <Field label="Cliente" className="floatingHintField">
                 {customerNameKey && (

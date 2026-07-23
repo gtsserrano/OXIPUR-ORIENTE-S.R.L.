@@ -11,7 +11,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 public record CreateSalesNoteRequest(
-        @NotBlank String noteNumber,
+        String noteNumber,
         @NotBlank String customerName,
         @NotNull LocalDateTime noteDate,
         String observations,

@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,10 +32,12 @@ import bo.com.oxipuroriente.inventory.modules.productos.infrastructure.ProductRe
 import bo.com.oxipuroriente.inventory.modules.ventas.domain.SalesNote;
 import bo.com.oxipuroriente.inventory.modules.ventas.domain.SalesNoteCollectedCylinder;
 import bo.com.oxipuroriente.inventory.modules.ventas.domain.SalesNoteDeliveredCylinder;
+import bo.com.oxipuroriente.inventory.modules.ventas.domain.SalesNoteNumberSequence;
 import bo.com.oxipuroriente.inventory.modules.ventas.domain.SalesNoteSourceType;
 import bo.com.oxipuroriente.inventory.modules.ventas.domain.SalesNoteStatus;
 import bo.com.oxipuroriente.inventory.modules.ventas.infrastructure.SalesNoteCollectedCylinderRepository;
 import bo.com.oxipuroriente.inventory.modules.ventas.infrastructure.SalesNoteDeliveredCylinderRepository;
+import bo.com.oxipuroriente.inventory.modules.ventas.infrastructure.SalesNoteNumberSequenceRepository;
 import bo.com.oxipuroriente.inventory.modules.ventas.infrastructure.SalesNoteRepository;
 import bo.com.oxipuroriente.inventory.modules.ventas.presentation.CreateSalesNoteRequest;
 import bo.com.oxipuroriente.inventory.modules.ventas.presentation.SalesNoteResponse;
@@ -44,8 +48,11 @@ import bo.com.oxipuroriente.inventory.shared.application.DatePeriod;
 public class SalesNoteService {
 
     private static final String MAIN_WAREHOUSE_CODE = "PLANTA";
+    private static final long SALES_NOTE_SEQUENCE_ID = 1L;
+    private static final Pattern SALES_NOTE_NUMBER_PATTERN = Pattern.compile("^NV-(\\d+)$", Pattern.CASE_INSENSITIVE);
 
     private final SalesNoteRepository salesNoteRepository;
+    private final SalesNoteNumberSequenceRepository salesNoteNumberSequenceRepository;
     private final SalesNoteDeliveredCylinderRepository deliveredRepository;
     private final SalesNoteCollectedCylinderRepository collectedRepository;
     private final InventoryMovementRepository movementRepository;
@@ -57,6 +64,7 @@ public class SalesNoteService {
 
     public SalesNoteService(
             SalesNoteRepository salesNoteRepository,
+            SalesNoteNumberSequenceRepository salesNoteNumberSequenceRepository,
             SalesNoteDeliveredCylinderRepository deliveredRepository,
             SalesNoteCollectedCylinderRepository collectedRepository,
             InventoryMovementRepository movementRepository,
@@ -66,6 +74,7 @@ public class SalesNoteService {
             CustomerResolver customerResolver,
             AuditLogService auditLogService) {
         this.salesNoteRepository = salesNoteRepository;
+        this.salesNoteNumberSequenceRepository = salesNoteNumberSequenceRepository;
         this.deliveredRepository = deliveredRepository;
         this.collectedRepository = collectedRepository;
         this.movementRepository = movementRepository;
@@ -84,8 +93,11 @@ public class SalesNoteService {
         if (delivered.isEmpty() && collected.isEmpty()) {
             throw new SalesNoteException("Sales note must contain at least one cylinder");
         }
-        if (salesNoteRepository.existsByNoteNumber(request.noteNumber())) {
-            throw new SalesNoteException("Sales note number already exists: " + request.noteNumber());
+        String noteNumber = request.noteNumber() == null || request.noteNumber().isBlank()
+                ? reserveNextNoteNumber()
+                : request.noteNumber().trim();
+        if (salesNoteRepository.existsByNoteNumber(noteNumber)) {
+            throw new SalesNoteException("Sales note number already exists: " + noteNumber);
         }
         validateNoRepeatedCylinder(delivered, collected);
 
@@ -94,7 +106,7 @@ public class SalesNoteService {
         String customerName = customer.getName();
 
         SalesNote salesNote = new SalesNote();
-        salesNote.setNoteNumber(request.noteNumber());
+        salesNote.setNoteNumber(noteNumber);
         salesNote.setCustomerId(customer.getId());
         salesNote.setCustomerName(customerName);
         salesNote.setNoteDate(request.noteDate());
@@ -121,6 +133,14 @@ public class SalesNoteService {
                 response,
                 auditSourceType(sourceType));
         return response;
+    }
+
+    @Transactional(readOnly = true)
+    public String nextNoteNumber() {
+        long currentValue = salesNoteNumberSequenceRepository.findById(SALES_NOTE_SEQUENCE_ID)
+                .map(SalesNoteNumberSequence::getCurrentValue)
+                .orElse(0L);
+        return formatNoteNumber(Math.max(currentValue, highestRegisteredNoteNumber()) + 1);
     }
 
     @Transactional(readOnly = true)
@@ -409,6 +429,37 @@ public class SalesNoteService {
 
     private BigDecimal utilityAmountOrZero(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private String reserveNextNoteNumber() {
+        SalesNoteNumberSequence sequence = salesNoteNumberSequenceRepository
+                .findByIdForUpdate(SALES_NOTE_SEQUENCE_ID)
+                .orElseThrow(() -> new SalesNoteException("Sales note number sequence is not configured"));
+        long nextValue = Math.max(sequence.getCurrentValue(), highestRegisteredNoteNumber()) + 1;
+        sequence.setCurrentValue(nextValue);
+        salesNoteNumberSequenceRepository.save(sequence);
+        return formatNoteNumber(nextValue);
+    }
+
+    private long highestRegisteredNoteNumber() {
+        return salesNoteRepository.findAllNoteNumbers().stream()
+                .map(SALES_NOTE_NUMBER_PATTERN::matcher)
+                .filter(Matcher::matches)
+                .mapToLong(matcher -> parseNoteNumber(matcher.group(1)))
+                .max()
+                .orElse(0L);
+    }
+
+    private long parseNoteNumber(String numericPart) {
+        try {
+            return Long.parseLong(numericPart);
+        } catch (NumberFormatException exception) {
+            return 0L;
+        }
+    }
+
+    private String formatNoteNumber(long value) {
+        return "NV-%06d".formatted(value);
     }
 
     private BigDecimal totalAmount(List<CreateSalesNoteRequest.DeliveredCylinderRequest> delivered) {
