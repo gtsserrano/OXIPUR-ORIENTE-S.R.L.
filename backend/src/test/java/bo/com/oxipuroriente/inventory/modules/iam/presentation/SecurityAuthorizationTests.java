@@ -131,8 +131,12 @@ class SecurityAuthorizationTests {
     }
 
     @Test
-    void allowsOperatorCylinderMutation() throws Exception {
+    void allowsOperatorReadingAndCreatingCylinders() throws Exception {
         String token = loginToken(createProfile("OPERADOR"));
+
+        mockMvc.perform(get("/api/cylinders")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+                .andExpect(status().isOk());
 
         JsonNode response = objectMapper.readTree(mockMvc.perform(post("/api/cylinders")
                         .header(HttpHeaders.AUTHORIZATION, bearer(token))

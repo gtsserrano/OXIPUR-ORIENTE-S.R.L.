@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -21,6 +22,8 @@ import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditAction;
 import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditSourceType;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.Cylinder;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderLocationType;
+import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderOwnerType;
+import bo.com.oxipuroriente.inventory.modules.cilindros.presentation.CylinderResponse;
 import bo.com.oxipuroriente.inventory.modules.cilindros.infrastructure.CylinderRepository;
 import bo.com.oxipuroriente.inventory.modules.clientes.domain.Customer;
 import bo.com.oxipuroriente.inventory.modules.clientes.application.CustomerResolver;
@@ -48,6 +51,7 @@ import bo.com.oxipuroriente.inventory.shared.application.DatePeriod;
 public class SalesNoteService {
 
     private static final String MAIN_WAREHOUSE_CODE = "PLANTA";
+    private static final String COMPANY_OWNER_NAME = "OXIPUR";
     private static final long SALES_NOTE_SEQUENCE_ID = 1L;
     private static final Pattern SALES_NOTE_NUMBER_PATTERN = Pattern.compile("^NV-(\\d+)$", Pattern.CASE_INSENSITIVE);
 
@@ -99,9 +103,12 @@ public class SalesNoteService {
         if (salesNoteRepository.existsByNoteNumber(noteNumber)) {
             throw new SalesNoteException("Sales note number already exists: " + noteNumber);
         }
-        validateNoRepeatedCylinder(delivered, collected);
 
         SalesNoteSourceType sourceType = request.sourceType() == null ? SalesNoteSourceType.USER : request.sourceType();
+        delivered = registerMissingDeliveredCylinders(delivered, sourceType);
+        collected = registerMissingCollectedCylinders(collected, sourceType);
+        validateNoRepeatedCylinder(delivered, collected);
+
         Customer customer = customerResolver.resolveOrCreate(request.customerName());
         String customerName = customer.getName();
 
@@ -133,6 +140,104 @@ public class SalesNoteService {
                 response,
                 auditSourceType(sourceType));
         return response;
+    }
+
+    private List<CreateSalesNoteRequest.DeliveredCylinderRequest> registerMissingDeliveredCylinders(
+            List<CreateSalesNoteRequest.DeliveredCylinderRequest> lines,
+            SalesNoteSourceType sourceType) {
+        return lines.stream()
+                .map(line -> {
+                    Cylinder cylinder = resolveOrCreateCylinder(
+                            line.cylinderId(),
+                            line.serialNumber(),
+                            line.capacityM3(),
+                            line.ownerName(),
+                            sourceType);
+                    return new CreateSalesNoteRequest.DeliveredCylinderRequest(
+                            cylinder.getId(),
+                            cylinder.getSerialNumber(),
+                            line.productId(),
+                            line.capacityM3(),
+                            line.amount(),
+                            line.ownerName(),
+                            line.observations());
+                })
+                .toList();
+    }
+
+    private List<CreateSalesNoteRequest.CollectedCylinderRequest> registerMissingCollectedCylinders(
+            List<CreateSalesNoteRequest.CollectedCylinderRequest> lines,
+            SalesNoteSourceType sourceType) {
+        return lines.stream()
+                .map(line -> {
+                    Cylinder cylinder = resolveOrCreateCylinder(
+                            line.cylinderId(),
+                            line.serialNumber(),
+                            line.capacityM3(),
+                            line.ownerName(),
+                            sourceType);
+                    return new CreateSalesNoteRequest.CollectedCylinderRequest(
+                            cylinder.getId(),
+                            cylinder.getSerialNumber(),
+                            line.productId(),
+                            line.capacityM3(),
+                            line.ownerName(),
+                            line.observations());
+                })
+                .toList();
+    }
+
+    private Cylinder resolveOrCreateCylinder(
+            Long cylinderId,
+            String serialNumber,
+            BigDecimal capacityM3,
+            String ownerName,
+            SalesNoteSourceType sourceType) {
+        if (cylinderId != null) {
+            return findActiveCylinder(cylinderId);
+        }
+        if (serialNumber == null || serialNumber.isBlank()) {
+            throw new SalesNoteException("Cylinder number is required");
+        }
+
+        String normalizedSerialNumber = serialNumber.trim();
+        Cylinder existing = cylinderRepository.findByNormalizedSerialNumber(normalizedSerialNumber).orElse(null);
+        if (existing != null) {
+            if (!existing.isActive()) {
+                throw new SalesNoteException("Cylinder is inactive: " + normalizedSerialNumber);
+            }
+            return existing;
+        }
+        if (capacityM3 == null || capacityM3.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new SalesNoteException("Capacity is required for new cylinder: " + normalizedSerialNumber);
+        }
+        if (ownerName == null || ownerName.isBlank()) {
+            throw new SalesNoteException("Owner is required for new cylinder: " + normalizedSerialNumber);
+        }
+
+        String normalizedOwnerName = ownerName.trim();
+        Cylinder cylinder = new Cylinder();
+        cylinder.setSerialNumber(normalizedSerialNumber);
+        cylinder.setCapacityM3(capacityM3);
+        cylinder.setOwner(normalizedOwnerName);
+        cylinder.setOwnerType(isCompanyOwner(normalizedOwnerName)
+                ? CylinderOwnerType.COMPANY
+                : CylinderOwnerType.CUSTOMER);
+        cylinder.setCurrentLocationType(CylinderLocationType.PLANTA);
+        cylinder.setActive(true);
+        Cylinder savedCylinder = cylinderRepository.save(cylinder);
+        auditLogService.record(
+                AuditAction.CREATE,
+                "CYLINDER",
+                savedCylinder.getId(),
+                null,
+                CylinderResponse.from(savedCylinder),
+                auditSourceType(sourceType));
+        return savedCylinder;
+    }
+
+    private boolean isCompanyOwner(String ownerName) {
+        return ownerName.trim().toUpperCase(Locale.ROOT).startsWith(COMPANY_OWNER_NAME);
     }
 
     @Transactional(readOnly = true)

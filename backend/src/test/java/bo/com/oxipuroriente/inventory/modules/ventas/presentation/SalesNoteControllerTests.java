@@ -9,7 +9,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -26,6 +29,7 @@ import bo.com.oxipuroriente.inventory.modules.almacenes.infrastructure.Warehouse
 import bo.com.oxipuroriente.inventory.modules.auditoria.infrastructure.AuditLogRepository;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.Cylinder;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderLocationType;
+import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderOwnerType;
 import bo.com.oxipuroriente.inventory.modules.cilindros.infrastructure.CylinderRepository;
 import bo.com.oxipuroriente.inventory.modules.clientes.domain.Customer;
 import bo.com.oxipuroriente.inventory.modules.clientes.domain.CustomerAlias;
@@ -115,6 +119,55 @@ class SalesNoteControllerTests {
         Cylinder updated = cylinderRepository.findById(cylinder.getId()).orElseThrow();
         assertThat(updated.getCurrentLocationType()).isEqualTo(CylinderLocationType.CLIENTE);
         assertThat(updated.getCurrentCustomerName()).isEqualTo("CLIENTE ENTREGA");
+    }
+
+    @Test
+    void automaticallyRegistersUnknownCylindersWithTheirOwnership() throws Exception {
+        Product product = createProduct();
+        Warehouse warehouse = mainWarehouse();
+        String deliveredSerial = next("CYL-AUTO-EMPRESA");
+        String collectedSerial = next("CYL-AUTO-CLIENTE");
+
+        JsonNode response = postSalesNote("""
+                {
+                  "noteNumber": "%s",
+                  "customerName": "Cliente Alta Automatica",
+                  "noteDate": "2026-07-27T09:00:00",
+                  "deliveredCylinders": [
+                    {
+                      "serialNumber": "%s",
+                      "productId": %d,
+                      "capacityM3": 7.50,
+                      "amount": 125.00,
+                      "ownerName": "OXIPUR ORIENTE SRL"
+                    }
+                  ],
+                  "collectedCylinders": [
+                    {
+                      "serialNumber": "%s",
+                      "capacityM3": 6.00,
+                      "ownerName": "CLIENTE PROPIETARIO"
+                    }
+                  ]
+                }
+                """.formatted(next("NV-AUTO-CYL"), deliveredSerial, product.getId(), collectedSerial));
+
+        assertThat(response.get("deliveredCylinders").get(0).get("serialNumber").asText())
+                .isEqualTo(deliveredSerial);
+        assertThat(response.get("collectedCylinders").get(0).get("serialNumber").asText())
+                .isEqualTo(collectedSerial);
+
+        Cylinder delivered = cylinderRepository.findByNormalizedSerialNumber(deliveredSerial).orElseThrow();
+        assertThat(delivered.getOwner()).isEqualTo("OXIPUR ORIENTE SRL");
+        assertThat(delivered.getOwnerType()).isEqualTo(CylinderOwnerType.COMPANY);
+        assertThat(delivered.getCurrentLocationType()).isEqualTo(CylinderLocationType.CLIENTE);
+        assertThat(delivered.getCurrentCustomerName()).isEqualTo("CLIENTE ALTA AUTOMATICA");
+
+        Cylinder collected = cylinderRepository.findByNormalizedSerialNumber(collectedSerial).orElseThrow();
+        assertThat(collected.getOwner()).isEqualTo("CLIENTE PROPIETARIO");
+        assertThat(collected.getOwnerType()).isEqualTo(CylinderOwnerType.CUSTOMER);
+        assertThat(collected.getCurrentLocationType()).isEqualTo(CylinderLocationType.PLANTA);
+        assertThat(collected.getCurrentWarehouseId()).isEqualTo(warehouse.getId());
     }
 
     @Test
@@ -517,6 +570,38 @@ class SalesNoteControllerTests {
 
         assertThat(detail.get("deliveredCylinders").size()).isEqualTo(1);
         assertThat(detail.get("movements").size()).isEqualTo(1);
+    }
+
+    @Test
+    void returnsEveryCylinderAndSumsEveryDeliveredAmount() throws Exception {
+        Warehouse warehouse = mainWarehouse();
+        Product product = createProduct();
+        List<Cylinder> cylinders = IntStream.range(0, 20)
+                .mapToObj(index -> createCylinderInPlant(warehouse.getId()))
+                .toList();
+        String deliveredLines = cylinders.stream()
+                .map(cylinder -> """
+                        {
+                          "cylinderId": %d,
+                          "productId": %d,
+                          "amount": 12.50
+                        }
+                        """.formatted(cylinder.getId(), product.getId()))
+                .collect(Collectors.joining(","));
+
+        JsonNode created = postSalesNote("""
+                {
+                  "noteNumber": "%s",
+                  "customerName": "Cliente Nota Completa",
+                  "noteDate": "2026-07-27T09:30:00",
+                  "deliveredCylinders": [%s]
+                }
+                """.formatted(next("NV-COMPLETA"), deliveredLines));
+        JsonNode detail = getJson("/api/sales-notes/" + created.get("id").longValue());
+
+        assertThat(detail.get("deliveredCylinders").size()).isEqualTo(20);
+        assertThat(detail.get("totalAmount").decimalValue())
+                .isEqualByComparingTo(new BigDecimal("250.00"));
     }
 
     @Test

@@ -81,7 +81,6 @@ const ROLE_PERMISSIONS = {
 
 const PAGE_PERMISSIONS = {
   utilities: PERMISSIONS.VIEW_UTILITIES,
-  cylinders: PERMISSIONS.MANAGE_CATALOGS,
   products: PERMISSIONS.MANAGE_CATALOGS,
   profiles: PERMISSIONS.MANAGE_PROFILES
 };
@@ -572,12 +571,21 @@ function App() {
       notify("Selecciona el producto para cada cilindro entregado.");
       return;
     }
+    const incompleteNewCylinder = [...deliveredLines, ...collectedLines].find((line) => {
+      const cylinder = findCylinderByNumber(state.cylinders, line.cylinderNumber);
+      return !cylinder && (line.capacityM3 === "" || !String(line.ownerName || "").trim());
+    });
+    if (incompleteNewCylinder) {
+      notify(`Completa la capacidad y la propiedad del cilindro nuevo ${incompleteNewCylinder.cylinderNumber}.`);
+      return;
+    }
 
     const deliveredCylinders = deliveredLines
       .map((line) => {
         const cylinder = findCylinderByNumber(state.cylinders, line.cylinderNumber);
         return {
           cylinderId: cylinder?.id,
+          serialNumber: line.cylinderNumber.trim(),
           productId: Number(line.productId),
           capacityM3: line.capacityM3 === "" ? cylinder?.capacityM3 ?? null : Number(line.capacityM3),
           amount: line.amount === "" ? null : Number(line.amount),
@@ -590,6 +598,7 @@ function App() {
         const cylinder = findCylinderByNumber(state.cylinders, line.cylinderNumber);
         return {
           cylinderId: cylinder?.id,
+          serialNumber: line.cylinderNumber.trim(),
           productId: line.productId ? Number(line.productId) : null,
           capacityM3: line.capacityM3 === "" ? cylinder?.capacityM3 ?? null : Number(line.capacityM3),
           ownerName: line.ownerName || saleCylinderOwnerName(cylinder) || null,
@@ -598,11 +607,6 @@ function App() {
       });
     if (!deliveredCylinders.length && !collectedCylinders.length) {
       notify("La nota debe tener al menos un cilindro entregado o recogido.");
-      return;
-    }
-    const unresolved = [...deliveredCylinders, ...collectedCylinders].some((line) => !line.cylinderId);
-    if (unresolved) {
-      notify("Uno o más números de cilindro no existen en el registro.");
       return;
     }
     const repeated = findRepeatedCylinder([...deliveredCylinders, ...collectedCylinders]);
@@ -1388,7 +1392,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
     const cylinderExists = existingCylinderNumbers.has(cylinderKey);
     return (
       <span className={cylinderExists ? "customerHint customerHintSuccess" : "customerHint customerHintWarning"}>
-        {cylinderExists ? "Cilindro ya existe en el apartado Cilindros." : "Cilindro no detectado en el apartado Cilindros."}
+        {cylinderExists ? "Cilindro ya existe en el apartado Cilindros." : "Cilindro nuevo: se registrará automáticamente al crear la nota."}
       </span>
     );
   };
@@ -1480,7 +1484,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                           </select>
                         </Field>
                         <Field label="Capacidad (m3)">
-                          <input type="number" min="0.01" step="0.01" value={line.capacityM3} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "capacityM3", event.target.value)} placeholder={selected ? String(selected.capacityM3) : "0.00"} />
+                          <input required={started && !selected} type="number" min="0.01" step="0.01" value={line.capacityM3} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "capacityM3", event.target.value)} placeholder={selected ? String(selected.capacityM3) : "0.00"} />
                         </Field>
                         <Field label="Monto (Bs)">
                           <input type="number" min="0" step="0.01" value={line.amount} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "amount", event.target.value)} placeholder="0.00" />
@@ -1488,6 +1492,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                         <Field label="Propiedad" className="floatingHintField">
                           {ownershipHint(line.ownerName)}
                           <AutocompleteInput
+                            required={started && !selected}
                             value={line.ownerName}
                             suggestion={ownerNameSuggestion(line.ownerName)}
                             onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "ownerName", uppercaseCustomerName(event.target.value))}
@@ -1526,11 +1531,12 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                           </select>
                         </Field>
                         <Field label="Capacidad (m3)">
-                          <input type="number" min="0.01" step="0.01" value={line.capacityM3} onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "capacityM3", event.target.value)} placeholder={selected ? String(selected.capacityM3) : "0.00"} />
+                          <input required={started && !selected} type="number" min="0.01" step="0.01" value={line.capacityM3} onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "capacityM3", event.target.value)} placeholder={selected ? String(selected.capacityM3) : "0.00"} />
                         </Field>
                         <Field label="Propiedad" className="floatingHintField">
                           {ownershipHint(line.ownerName)}
                           <AutocompleteInput
+                            required={started && !selected}
                             value={line.ownerName}
                             suggestion={ownerNameSuggestion(line.ownerName)}
                             onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "ownerName", uppercaseCustomerName(event.target.value))}
@@ -1743,7 +1749,7 @@ function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId,
           </button>
         </div>
         <DataTable
-          columns={["Seleccionar", "Número", "Cliente", "Fecha", "Estado"]}
+          columns={["Seleccionar", "Número", "Cliente", "Fecha", "Importe total", "Estado"]}
           rows={salesNotes.map((note) => [
             <label className="printSelect">
               <input
@@ -1757,6 +1763,7 @@ function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId,
             note.noteNumber,
             note.customerName,
             formatDateTime(note.noteDate),
+            money(note.totalAmount),
             note.status === "CANCELLED" ? <span className="dangerBadge">ANULADA</span> : "REGISTERED"
           ])}
           empty="Sin notas registradas para imprimir"
@@ -2449,8 +2456,10 @@ function buildDateQuery(filter) {
 function findRepeatedCylinder(lines) {
   const seen = new Set();
   for (const line of lines) {
-    if (seen.has(line.cylinderId)) return line.cylinderId;
-    seen.add(line.cylinderId);
+    const serialNumber = normalizeCylinderNumberKey(line.serialNumber);
+    const key = line.cylinderId ? `id:${line.cylinderId}` : `serial:${serialNumber}`;
+    if (seen.has(key)) return line.serialNumber || line.cylinderId;
+    seen.add(key);
   }
   return null;
 }
@@ -2608,7 +2617,8 @@ async function printSaleNote(note) {
   printWindow.document.close();
 
   try {
-    const pdfBytes = await buildSaleNotePdf(note);
+    const completeNote = note?.id ? await api(`/api/sales-notes/${note.id}`) : note;
+    const pdfBytes = await buildSaleNotePdf(completeNote);
     const pdfUrl = URL.createObjectURL(new Blob([pdfBytes], { type: "application/pdf" }));
     printWindow.location.href = pdfUrl;
     window.setTimeout(() => {
@@ -2642,16 +2652,25 @@ async function buildSaleNotePdf(note) {
   const pages = chunkRows(rows.length ? rows : [], SALE_NOTE_ROWS_PER_PAGE);
   const printablePages = pages.length ? pages : [[]];
 
-  for (const pageRows of printablePages) {
+  for (let pageIndex = 0; pageIndex < printablePages.length; pageIndex += 1) {
+    const pageRows = printablePages[pageIndex];
     const [page] = await output.copyPages(template, [templatePageIndex]);
     output.addPage(page);
-    drawSaleNotePage(page, note, pageRows, rows, regularFont, boldFont);
+    drawSaleNotePage(
+      page,
+      note,
+      pageRows,
+      rows,
+      pageIndex,
+      regularFont,
+      boldFont
+    );
   }
 
   return output.save();
 }
 
-function drawSaleNotePage(page, note, pageRows, allRows, regularFont, boldFont) {
+function drawSaleNotePage(page, note, pageRows, allRows, pageIndex, regularFont, boldFont) {
   const black = rgb(0, 0, 0);
   const red = rgb(1, 0, 0);
   const white = rgb(1, 1, 1);
@@ -2693,10 +2712,17 @@ function drawSaleNotePage(page, note, pageRows, allRows, regularFont, boldFont) 
     color: black
   });
 
-  pageRows.forEach((line, index) => drawSaleNotePdfRow(page, line, index, regularFont, black));
+  pageRows.forEach((line, index) => drawSaleNotePdfRow(
+    page,
+    line,
+    index,
+    pageIndex * SALE_NOTE_ROWS_PER_PAGE + index + 1,
+    regularFont,
+    black
+  ));
 
   coverPdfText(page, 407, 334.5, 122, 15, white);
-  drawPdfText(page, `Bs ${formatMoneyPlain(note.utilityAmount)}`, 410, 337.73, {
+  drawPdfText(page, `Bs ${formatMoneyPlain(calculateSaleNoteTotalAmount(note))}`, 410, 337.73, {
     font: regularFont,
     size: 8.76,
     color: black,
@@ -2704,11 +2730,11 @@ function drawSaleNotePage(page, note, pageRows, allRows, regularFont, boldFont) 
   });
 }
 
-function drawSaleNotePdfRow(page, line, index, font, color) {
+function drawSaleNotePdfRow(page, line, index, rowNumber, font, color) {
   const y = 551.47 - index * 12;
   const detailY = y - 1.44;
 
-  drawPdfText(page, String(index + 1), index < 9 ? 83.4 : 81.48, y, { font, size: 7.44, color, maxWidth: 18 });
+  drawPdfText(page, String(rowNumber), rowNumber < 10 ? 83.4 : 81.48, y, { font, size: 7.44, color, maxWidth: 18 });
   drawPdfText(page, line.serialNumber, 130.1, y, { font, size: 7.44, color, maxWidth: 70 });
   drawPdfText(page, line.capacityM3, 220.01, y, { font, size: 7.44, color, maxWidth: 34 });
   drawPdfText(page, line.ownerName, 286.13, detailY, { font, size: 7.44, color, maxWidth: 62 });
@@ -2781,6 +2807,13 @@ function chunkRows(rows, size) {
     chunks.push(rows.slice(index, index + size));
   }
   return chunks;
+}
+
+function calculateSaleNoteTotalAmount(note) {
+  return (note?.deliveredCylinders || []).reduce(
+    (total, line) => total + Number(line.amount || 0),
+    0
+  );
 }
 
 function sumNoteCapacity(lines) {

@@ -21,7 +21,8 @@ public record CreateSalesNoteRequest(
         @Valid List<CollectedCylinderRequest> collectedCylinders) {
 
     public record DeliveredCylinderRequest(
-            @NotNull Long cylinderId,
+            Long cylinderId,
+            String serialNumber,
             @NotNull Long productId,
             @DecimalMin(value = "0.01")
             BigDecimal capacityM3,
@@ -32,7 +33,8 @@ public record CreateSalesNoteRequest(
     }
 
     public record CollectedCylinderRequest(
-            @NotNull Long cylinderId,
+            Long cylinderId,
+            String serialNumber,
             Long productId,
             @DecimalMin(value = "0.01")
             BigDecimal capacityM3,

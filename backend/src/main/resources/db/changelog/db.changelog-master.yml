@@ -1349,3 +1349,9 @@ databaseChangeLog:
               - column:
                   name: current_value
                   valueNumeric: 0
+  - changeSet:
+      id: 034-recalculate-sales-note-total-amounts
+      author: codex
+      changes:
+        - sql:
+            sql: UPDATE sales_notes SET total_amount = COALESCE((SELECT SUM(COALESCE(delivered.amount, 0)) FROM sales_note_delivered_cylinders delivered WHERE delivered.sales_note_id = sales_notes.id), 0)
