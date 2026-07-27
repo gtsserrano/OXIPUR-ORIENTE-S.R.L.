@@ -1,0 +1,6 @@
+# Los archivos ejecutados en Linux deben conservar finales de línea LF,
+# incluso cuando el proyecto se prepara desde Windows.
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
+Caddyfile text eol=lf
