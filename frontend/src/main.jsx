@@ -2678,9 +2678,9 @@ function drawSaleNotePage(page, note, pageRows, allRows, pageIndex, regularFont,
   const collectedCount = (note.collectedCylinders || []).length;
 
   coverPdfText(page, 474.2, 651.5, 66, 18, white);
-  drawPdfText(page, note.noteNumber || "", 475.9, 655.9, {
+  drawPdfText(page, formatSaleNoteNumberForPdf(note.noteNumber), 475.9, 655.9, {
     font: boldFont,
-    size: 13.68,
+    size: 12,
     color: red,
     maxWidth: 64
   });
@@ -2799,6 +2799,15 @@ function fitPdfText(text, font, size, maxWidth = Number.POSITIVE_INFINITY) {
     next = next.slice(0, -1);
   }
   return `${next}...`;
+}
+
+function formatSaleNoteNumberForPdf(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  const numericMatch = normalized.match(/^(?:NV-)?(\d+)$/);
+  if (!numericMatch) {
+    return normalized;
+  }
+  return `NV-${numericMatch[1].padStart(6, "0")}`;
 }
 
 function chunkRows(rows, size) {
