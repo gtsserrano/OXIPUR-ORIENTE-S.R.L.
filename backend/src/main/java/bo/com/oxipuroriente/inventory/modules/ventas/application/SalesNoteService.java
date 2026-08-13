@@ -105,8 +105,9 @@ public class SalesNoteService {
         }
 
         SalesNoteSourceType sourceType = request.sourceType() == null ? SalesNoteSourceType.USER : request.sourceType();
-        delivered = registerMissingDeliveredCylinders(delivered, sourceType);
-        collected = registerMissingCollectedCylinders(collected, sourceType);
+        boolean registerMissingCylinders = Boolean.TRUE.equals(request.registerMissingCylinders());
+        delivered = registerMissingDeliveredCylinders(delivered, sourceType, registerMissingCylinders);
+        collected = registerMissingCollectedCylinders(collected, sourceType, registerMissingCylinders);
         validateNoRepeatedCylinder(delivered, collected);
 
         Customer customer = customerResolver.resolveOrCreate(request.customerName());
@@ -144,7 +145,8 @@ public class SalesNoteService {
 
     private List<CreateSalesNoteRequest.DeliveredCylinderRequest> registerMissingDeliveredCylinders(
             List<CreateSalesNoteRequest.DeliveredCylinderRequest> lines,
-            SalesNoteSourceType sourceType) {
+            SalesNoteSourceType sourceType,
+            boolean registerMissingCylinders) {
         return lines.stream()
                 .map(line -> {
                     Cylinder cylinder = resolveOrCreateCylinder(
@@ -152,7 +154,8 @@ public class SalesNoteService {
                             line.serialNumber(),
                             line.capacityM3(),
                             line.ownerName(),
-                            sourceType);
+                            sourceType,
+                            registerMissingCylinders);
                     return new CreateSalesNoteRequest.DeliveredCylinderRequest(
                             cylinder.getId(),
                             cylinder.getSerialNumber(),
@@ -167,7 +170,8 @@ public class SalesNoteService {
 
     private List<CreateSalesNoteRequest.CollectedCylinderRequest> registerMissingCollectedCylinders(
             List<CreateSalesNoteRequest.CollectedCylinderRequest> lines,
-            SalesNoteSourceType sourceType) {
+            SalesNoteSourceType sourceType,
+            boolean registerMissingCylinders) {
         return lines.stream()
                 .map(line -> {
                     Cylinder cylinder = resolveOrCreateCylinder(
@@ -175,7 +179,8 @@ public class SalesNoteService {
                             line.serialNumber(),
                             line.capacityM3(),
                             line.ownerName(),
-                            sourceType);
+                            sourceType,
+                            registerMissingCylinders);
                     return new CreateSalesNoteRequest.CollectedCylinderRequest(
                             cylinder.getId(),
                             cylinder.getSerialNumber(),
@@ -192,7 +197,8 @@ public class SalesNoteService {
             String serialNumber,
             BigDecimal capacityM3,
             String ownerName,
-            SalesNoteSourceType sourceType) {
+            SalesNoteSourceType sourceType,
+            boolean registerMissingCylinders) {
         if (cylinderId != null) {
             return findActiveCylinder(cylinderId);
         }
@@ -207,6 +213,10 @@ public class SalesNoteService {
                 throw new SalesNoteException("Cylinder is inactive: " + normalizedSerialNumber);
             }
             return existing;
+        }
+        if (!registerMissingCylinders) {
+            throw new SalesNoteException(
+                    "Cylinder is not registered and requires explicit confirmation: " + normalizedSerialNumber);
         }
         if (capacityM3 == null || capacityM3.compareTo(BigDecimal.ZERO) <= 0) {
             throw new SalesNoteException("Capacity is required for new cylinder: " + normalizedSerialNumber);
@@ -255,11 +265,20 @@ public class SalesNoteService {
 
     @Transactional(readOnly = true)
     public List<SalesNoteResponse> findAll(DatePeriod period) {
-        List<SalesNote> notes = period == null
-                ? salesNoteRepository.findAllByOrderByNoteDateDescIdDesc()
-                : salesNoteRepository.findByNoteDateGreaterThanEqualAndNoteDateLessThanOrderByNoteDateDescIdDesc(
-                        period.fromDate(),
-                        period.toDate());
+        return findAll(period, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SalesNoteResponse> findAll(DatePeriod period, String noteNumber, String customerName) {
+        String normalizedNoteNumber = optionalFilter(noteNumber);
+        String normalizedCustomerName = optionalFilter(customerName);
+        LocalDateTime fromDate = period == null ? null : period.fromDate();
+        LocalDateTime toDate = period == null ? null : period.toDate();
+        List<SalesNote> notes = salesNoteRepository.findByFilters(
+                fromDate,
+                toDate,
+                normalizedNoteNumber,
+                normalizedCustomerName);
         return loadResponses(notes);
     }
 
@@ -530,6 +549,10 @@ public class SalesNoteService {
 
     private <T> List<T> emptyIfNull(List<T> values) {
         return values == null ? List.of() : values;
+    }
+
+    private String optionalFilter(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private BigDecimal utilityAmountOrZero(BigDecimal value) {

@@ -14,10 +14,13 @@ import {
   Gauge,
   LayoutDashboard,
   Banknote,
+  CheckCircle2,
+  CircleX,
   Package,
   Plus,
   Printer,
   RefreshCw,
+  LoaderCircle,
   Trash2,
   UserRound,
   Users,
@@ -162,10 +165,11 @@ function App() {
   const [forms, setForms] = useState(emptyForm);
   const [profileEditorClosing, setProfileEditorClosing] = useState(false);
   const [cylinderEditorClosing, setCylinderEditorClosing] = useState(false);
-  const [salesDateFilter, setSalesDateFilter] = useState(createDateFilter("MONTH"));
+  const [salesDateFilter, setSalesDateFilter] = useState(createSalesNoteFilter("MONTH"));
   const [movementDateFilter, setMovementDateFilter] = useState(createDateFilter("MONTH"));
   const [utilityDateFilter, setUtilityDateFilter] = useState(createDateFilter("MONTH"));
   const [selectedPrintNoteId, setSelectedPrintNoteId] = useState("");
+  const [missingCylinderDialog, setMissingCylinderDialog] = useState(null);
   const visibleNavItems = useMemo(() => filterNavItemsForSession(navItems, session), [session?.profile?.roleName]);
 
   async function loadAll() {
@@ -173,7 +177,7 @@ function App() {
     try {
       const canManageProfiles = hasPermission(session, PERMISSIONS.MANAGE_PROFILES);
       const canViewUtilities = hasPermission(session, PERMISSIONS.VIEW_UTILITIES);
-      const salesDateQuery = buildDateQuery(salesDateFilter);
+      const salesDateQuery = buildSalesNoteQuery(salesDateFilter);
       const movementDateQuery = buildDateQuery(movementDateFilter);
       const utilityDateQuery = buildDateQuery(utilityDateFilter);
       const [cylinders, products, customers, inventory, movements, salesNotes, operationalAlerts, profiles, utilitiesSummary] = await Promise.all([
@@ -365,7 +369,7 @@ function App() {
   }
 
   async function searchSalesNotes(nextFilter = salesDateFilter) {
-    const salesNotes = await api(`/api/sales-notes${buildDateQuery(nextFilter)}`);
+    const salesNotes = await api(`/api/sales-notes${buildSalesNoteQuery(nextFilter)}`);
     setState((value) => ({ ...value, salesNotes }));
   }
 
@@ -538,6 +542,20 @@ function App() {
     setState((value) => ({ ...value, profiles }));
   }
 
+  async function submitNewSale(payload, { showToast = true } = {}) {
+    await api("/api/sales-notes", {
+      method: "POST",
+      body: payload
+    });
+    setForms((value) => ({ ...value, sale: newSaleForm() }));
+    await loadAll();
+    await loadNextSalesNoteNumber();
+    await loadUtilities(utilityDateFilter);
+    if (showToast) {
+      notify("Nota de venta registrada.");
+    }
+  }
+
   async function createSale(event) {
     event.preventDefault();
     const form = forms.sale;
@@ -614,25 +632,72 @@ function App() {
       notify(`El cilindro ${repeated} está repetido en la nota.`);
       return;
     }
-    await runAction(async () => {
-      await api("/api/sales-notes", {
-        method: "POST",
-        body: {
-          noteNumber: null,
-          customerName: uppercaseCustomerName(form.customerName),
-          noteDate: form.noteDate,
-          observations: form.observations || null,
-          utilityAmount: moneyInputValue(form.utilityAmount),
-          deliveredCylinders,
-          collectedCylinders
-        }
+    const payload = {
+      noteNumber: null,
+      customerName: uppercaseCustomerName(form.customerName),
+      noteDate: form.noteDate,
+      observations: form.observations || null,
+      utilityAmount: moneyInputValue(form.utilityAmount),
+      registerMissingCylinders: false,
+      deliveredCylinders,
+      collectedCylinders
+    };
+    const missingCylinders = [
+      ...deliveredLines.map((line) => ({
+        movementType: "ENTREGADO",
+        serialNumber: line.cylinderNumber.trim(),
+        productName: findById(state.products, line.productId)?.name || "-",
+        capacityM3: Number(line.capacityM3),
+        ownerName: uppercaseCustomerName(line.ownerName),
+        amount: line.amount === "" ? null : Number(line.amount)
+      })),
+      ...collectedLines.map((line) => ({
+        movementType: "RECIBIDO",
+        serialNumber: line.cylinderNumber.trim(),
+        productName: findById(state.products, line.productId)?.name || "-",
+        capacityM3: Number(line.capacityM3),
+        ownerName: uppercaseCustomerName(line.ownerName),
+        amount: null
+      }))
+    ].filter((line) => !findCylinderByNumber(state.cylinders, line.serialNumber));
+
+    if (missingCylinders.length) {
+      setMissingCylinderDialog({
+        status: "confirm",
+        cylinders: missingCylinders,
+        payload,
+        error: ""
       });
-      setForms((value) => ({ ...value, sale: newSaleForm() }));
-      await loadAll();
-      await loadNextSalesNoteNumber();
-      await loadUtilities(utilityDateFilter);
-      notify("Nota de venta registrada.");
-    });
+      return;
+    }
+
+    await runAction(() => submitNewSale(payload));
+  }
+
+  async function confirmMissingCylinderRegistration() {
+    if (!missingCylinderDialog?.payload || missingCylinderDialog.status === "processing") return;
+    const pendingDialog = missingCylinderDialog;
+    setMissingCylinderDialog({ ...pendingDialog, status: "processing", error: "" });
+    try {
+      await submitNewSale(
+        { ...pendingDialog.payload, registerMissingCylinders: true },
+        { showToast: false }
+      );
+      setMissingCylinderDialog({ ...pendingDialog, status: "success", error: "" });
+      window.setTimeout(() => setMissingCylinderDialog(null), 2200);
+    } catch (error) {
+      setMissingCylinderDialog({
+        ...pendingDialog,
+        status: "error",
+        error: error.message || "No se pudo registrar el cilindro."
+      });
+    }
+  }
+
+  function rejectMissingCylinderRegistration() {
+    if (!missingCylinderDialog || missingCylinderDialog.status === "processing") return;
+    setMissingCylinderDialog((current) => current ? { ...current, status: "rejected", error: "" } : current);
+    window.setTimeout(() => setMissingCylinderDialog(null), 2200);
   }
 
   async function deleteProduct(product) {
@@ -872,6 +937,14 @@ function App() {
           {state.loading ? <Skeleton /> : page}
         </section>
       </main>
+      {missingCylinderDialog && (
+        <MissingCylinderDialog
+          dialog={missingCylinderDialog}
+          onConfirm={confirmMissingCylinderRegistration}
+          onReject={rejectMissingCylinderRegistration}
+          onClose={() => setMissingCylinderDialog(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1392,7 +1465,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
     const cylinderExists = existingCylinderNumbers.has(cylinderKey);
     return (
       <span className={cylinderExists ? "customerHint customerHintSuccess" : "customerHint customerHintWarning"}>
-        {cylinderExists ? "Cilindro ya existe en el apartado Cilindros." : "Cilindro nuevo: se registrará automáticamente al crear la nota."}
+        {cylinderExists ? "Cilindro ya existe en el apartado Cilindros." : "Este cilindro no existe en la base de datos. Se solicitará confirmación antes de registrarlo."}
       </span>
     );
   };
@@ -1570,7 +1643,30 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
           onChange={setSalesDateFilter}
           onApply={searchSalesNotes}
           onClear={searchSalesNotes}
-        />
+          clearValueFactory={createSalesNoteFilter}
+          className="salesNotesFilter"
+        >
+          <Field label="Número de nota">
+            <input
+              value={salesDateFilter.noteNumber}
+              onChange={(event) => setSalesDateFilter({ ...salesDateFilter, noteNumber: event.target.value.toUpperCase() })}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") searchSalesNotes(salesDateFilter);
+              }}
+              placeholder="NV-000123"
+            />
+          </Field>
+          <Field label="Cliente">
+            <input
+              value={salesDateFilter.customerName}
+              onChange={(event) => setSalesDateFilter({ ...salesDateFilter, customerName: uppercaseCustomerName(event.target.value) })}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") searchSalesNotes(salesDateFilter);
+              }}
+              placeholder="Nombre del cliente"
+            />
+          </Field>
+        </DatePeriodFilter>
         <DataTable
           compact
           columns={["Número", "Cliente", "Fecha", "Total venta", "Estado", "Acciones"]}
@@ -1840,19 +1936,19 @@ function PreviewSection({ title, columns, rows, empty }) {
   );
 }
 
-function DatePeriodFilter({ value, onChange, onApply, onClear, applyLabel = "Aplicar", applyDisabled = false }) {
+function DatePeriodFilter({ value, onChange, onApply, onClear, applyLabel = "Aplicar", applyDisabled = false, clearValueFactory = createDateFilter, className = "", children = null }) {
   function update(field, fieldValue) {
     onChange({ ...value, [field]: fieldValue });
   }
 
   function clear() {
-    const next = createDateFilter();
+    const next = clearValueFactory();
     onChange(next);
     onClear(next);
   }
 
   return (
-    <div className="dateFilter">
+    <div className={`dateFilter${className ? ` ${className}` : ""}`}>
       <Field label="Tipo de fecha">
         <select value={value.dateFilterType} onChange={(event) => update("dateFilterType", event.target.value)}>
           <option value="">Sin filtro</option>
@@ -1883,6 +1979,7 @@ function DatePeriodFilter({ value, onChange, onApply, onClear, applyLabel = "Apl
           <input type="number" min="2000" max="2100" value={value.year} onChange={(event) => update("year", Number(event.target.value))} />
         </Field>
       )}
+      {children}
       <div className="dateFilterActions">
         <button type="button" className="primaryBtn" onClick={() => onApply(value)} disabled={applyDisabled}>{applyLabel}</button>
         <button type="button" className="secondaryBtn" onClick={clear}>Limpiar</button>
@@ -2239,6 +2336,86 @@ function IconButton({ title, onClick, icon: Icon, disabled = false }) {
   );
 }
 
+function MissingCylinderDialog({ dialog, onConfirm, onReject, onClose }) {
+  const count = dialog.cylinders?.length || 0;
+  const isConfirming = dialog.status === "confirm";
+  const isProcessing = dialog.status === "processing";
+  const isSuccess = dialog.status === "success";
+  const isRejected = dialog.status === "rejected";
+  const isError = dialog.status === "error";
+
+  return (
+    <div className="modalOverlay" role="presentation">
+      <section className={`missingCylinderModal ${dialog.status}`} role="dialog" aria-modal="true" aria-labelledby="missing-cylinder-title">
+        {(isConfirming || isProcessing) && (
+          <>
+            <div className="missingCylinderHeader">
+              <div className="missingCylinderStatusIcon warning"><Gauge size={28} /></div>
+              <div>
+                <span>VALIDACIÓN DE CILINDROS</span>
+                <h3 id="missing-cylinder-title">
+                  {count === 1 ? "El cilindro no está registrado" : "Hay cilindros sin registrar"}
+                </h3>
+              </div>
+            </div>
+            <p className="missingCylinderQuestion">
+              {count === 1
+                ? "Este cilindro no existe en la base de datos actual. ¿Quieres agregarlo antes de crear la nota de venta?"
+                : `Estos ${count} cilindros no existen en la base de datos actual. ¿Quieres agregarlos antes de crear la nota de venta?`}
+            </p>
+            <div className="missingCylinderPreview">
+              <div className="missingCylinderPreviewTitle">Vista previa de la información</div>
+              <DataTable
+                columns={["Movimiento", "Cilindro", "Producto", "Capacidad", "Propiedad", "Monto"]}
+                rows={(dialog.cylinders || []).map((cylinder) => [
+                  cylinder.movementType,
+                  cylinder.serialNumber,
+                  cylinder.productName,
+                  `${formatCapacity(cylinder.capacityM3)} m3`,
+                  cylinder.ownerName,
+                  cylinder.amount == null ? "-" : money(cylinder.amount)
+                ])}
+                empty="No hay cilindros pendientes."
+              />
+            </div>
+            <div className="missingCylinderActions">
+              <button type="button" className="primaryBtn" onClick={onConfirm} disabled={isProcessing}>
+                {isProcessing ? <><LoaderCircle className="spinIcon" size={17} /> Registrando...</> : "Sí, agregar y crear nota"}
+              </button>
+              <button type="button" className="secondaryBtn dangerSecondaryBtn" onClick={onReject} disabled={isProcessing}>
+                No, cancelar
+              </button>
+            </div>
+          </>
+        )}
+        {isSuccess && (
+          <div className="cylinderDecisionResult success" role="status">
+            <CheckCircle2 size={74} />
+            <h3 id="missing-cylinder-title">{count === 1 ? "¡Cilindro registrado!" : "¡Cilindros registrados!"}</h3>
+            <p>
+              {count === 1
+                ? "El cilindro fue agregado a la base de datos y la nota de venta se creó correctamente."
+                : `Los ${count} cilindros fueron agregados a la base de datos y la nota de venta se creó correctamente.`}
+            </p>
+          </div>
+        )}
+        {(isRejected || isError) && (
+          <div className="cylinderDecisionResult rejected" role="alert">
+            <CircleX size={74} />
+            <h3 id="missing-cylinder-title">{isRejected ? "Cilindro no agregado" : "No se pudo completar la operación"}</h3>
+            <p>
+              {isRejected
+                ? "No se agregó el cilindro y la nota de venta no fue creada. Corrige o elimina la línea para continuar."
+                : dialog.error}
+            </p>
+            {isError && <button type="button" className="secondaryBtn" onClick={onClose}>Volver a la nota</button>}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function DetailModal({ eyebrow, title, children, onClose }) {
   const [closing, setClosing] = useState(false);
 
@@ -2436,6 +2613,14 @@ function createDateFilter(dateFilterType = "") {
   };
 }
 
+function createSalesNoteFilter(dateFilterType = "") {
+  return {
+    ...createDateFilter(dateFilterType),
+    noteNumber: "",
+    customerName: ""
+  };
+}
+
 function buildDateQuery(filter) {
   if (!filter?.dateFilterType) return "";
   const params = new URLSearchParams();
@@ -2451,6 +2636,15 @@ function buildDateQuery(filter) {
     params.set("year", filter.year);
   }
   return `?${params.toString()}`;
+}
+
+function buildSalesNoteQuery(filter) {
+  const params = new URLSearchParams(buildDateQuery(filter).replace(/^\?/, ""));
+  const noteNumber = String(filter?.noteNumber || "").trim();
+  const customerName = String(filter?.customerName || "").trim();
+  if (noteNumber) params.set("noteNumber", noteNumber);
+  if (customerName) params.set("customerName", customerName);
+  return params.toString() ? `?${params.toString()}` : "";
 }
 
 function findRepeatedCylinder(lines) {

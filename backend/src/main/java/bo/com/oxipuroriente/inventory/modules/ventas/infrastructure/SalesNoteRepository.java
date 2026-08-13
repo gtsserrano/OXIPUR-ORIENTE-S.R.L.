@@ -25,6 +25,21 @@ public interface SalesNoteRepository extends JpaRepository<SalesNote, Long> {
             LocalDateTime toDate);
 
     @Query("""
+            select s
+            from SalesNote s
+            where (:fromDate is null or s.noteDate >= :fromDate)
+              and (:toDate is null or s.noteDate < :toDate)
+              and (:noteNumber is null or upper(s.noteNumber) like concat('%', upper(:noteNumber), '%'))
+              and (:customerName is null or upper(s.customerName) like concat('%', upper(:customerName), '%'))
+            order by s.noteDate desc, s.id desc
+            """)
+    List<SalesNote> findByFilters(
+            @Param("fromDate") LocalDateTime fromDate,
+            @Param("toDate") LocalDateTime toDate,
+            @Param("noteNumber") String noteNumber,
+            @Param("customerName") String customerName);
+
+    @Query("""
             select coalesce(sum(s.totalAmount), 0)
             from SalesNote s
             where s.status = :status

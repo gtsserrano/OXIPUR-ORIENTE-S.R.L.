@@ -17,6 +17,7 @@ public record CreateSalesNoteRequest(
         String observations,
         @DecimalMin(value = "0.00") BigDecimal utilityAmount,
         SalesNoteSourceType sourceType,
+        Boolean registerMissingCylinders,
         @Valid List<DeliveredCylinderRequest> deliveredCylinders,
         @Valid List<CollectedCylinderRequest> collectedCylinders) {
 

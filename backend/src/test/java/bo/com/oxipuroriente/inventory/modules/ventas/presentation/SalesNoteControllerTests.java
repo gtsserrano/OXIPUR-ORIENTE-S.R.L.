@@ -133,6 +133,7 @@ class SalesNoteControllerTests {
                   "noteNumber": "%s",
                   "customerName": "Cliente Alta Automatica",
                   "noteDate": "2026-07-27T09:00:00",
+                  "registerMissingCylinders": true,
                   "deliveredCylinders": [
                     {
                       "serialNumber": "%s",
@@ -168,6 +169,37 @@ class SalesNoteControllerTests {
         assertThat(collected.getOwnerType()).isEqualTo(CylinderOwnerType.CUSTOMER);
         assertThat(collected.getCurrentLocationType()).isEqualTo(CylinderLocationType.PLANTA);
         assertThat(collected.getCurrentWarehouseId()).isEqualTo(warehouse.getId());
+    }
+
+    @Test
+    void rejectsUnknownCylinderWithoutExplicitRegistrationConfirmation() throws Exception {
+        Product product = createProduct();
+        String unknownSerial = next("CYL-SIN-CONFIRMAR");
+        long cylindersBefore = cylinderRepository.count();
+        long notesBefore = salesNoteRepository.count();
+
+        mockMvc.perform(post("/api/sales-notes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "noteNumber": "%s",
+                                  "customerName": "Cliente Sin Confirmacion",
+                                  "noteDate": "2026-08-13T09:00:00",
+                                  "deliveredCylinders": [
+                                    {
+                                      "serialNumber": "%s",
+                                      "productId": %d,
+                                      "capacityM3": 6.00,
+                                      "ownerName": "OXIPUR"
+                                    }
+                                  ]
+                                }
+                                """.formatted(next("NV-SIN-CONFIRMAR"), unknownSerial, product.getId())))
+                .andExpect(status().isBadRequest());
+
+        assertThat(cylinderRepository.findByNormalizedSerialNumber(unknownSerial)).isEmpty();
+        assertThat(cylinderRepository.count()).isEqualTo(cylindersBefore);
+        assertThat(salesNoteRepository.count()).isEqualTo(notesBefore);
     }
 
     @Test
@@ -668,6 +700,59 @@ class SalesNoteControllerTests {
     }
 
     @Test
+    void filtersSalesNotesByNoteNumberAndCustomerNameTogetherWithDate() throws Exception {
+        Warehouse warehouse = mainWarehouse();
+        Product product = createProduct();
+        Cylinder targetCylinder = createCylinderInPlant(warehouse.getId());
+        Cylinder otherCylinder = createCylinderInPlant(warehouse.getId());
+        String targetNumber = next("NV-BUSQUEDA-OBJETIVO");
+        String otherNumber = next("NV-BUSQUEDA-OTRA");
+
+        postSalesNote("""
+                {
+                  "noteNumber": "%s",
+                  "customerName": "Clinica Busqueda Especial",
+                  "noteDate": "2032-04-12T10:30:00",
+                  "deliveredCylinders": [
+                    {
+                      "cylinderId": %d,
+                      "productId": %d
+                    }
+                  ]
+                }
+                """.formatted(targetNumber, targetCylinder.getId(), product.getId()));
+        postSalesNote("""
+                {
+                  "noteNumber": "%s",
+                  "customerName": "Otro Cliente",
+                  "noteDate": "2032-04-12T11:30:00",
+                  "deliveredCylinders": [
+                    {
+                      "cylinderId": %d,
+                      "productId": %d
+                    }
+                  ]
+                }
+                """.formatted(otherNumber, otherCylinder.getId(), product.getId()));
+
+        JsonNode byNumber = getJsonWithParams(
+                "noteNumber", targetNumber.substring(targetNumber.length() - 4));
+        JsonNode byCustomer = getJsonWithParams(
+                "customerName", "busqueda especial");
+        JsonNode combined = getJsonWithParams(
+                "dateFilterType", "MONTH",
+                "year", "2032",
+                "month", "4",
+                "noteNumber", "OBJETIVO",
+                "customerName", "CLINICA BUSQUEDA");
+
+        assertThat(hasNoteForCustomer(byNumber, "CLINICA BUSQUEDA ESPECIAL")).isTrue();
+        assertThat(hasNoteForCustomer(byCustomer, "CLINICA BUSQUEDA ESPECIAL")).isTrue();
+        assertThat(combined.size()).isEqualTo(1);
+        assertThat(combined.get(0).get("noteNumber").asText()).isEqualTo(targetNumber);
+    }
+
+    @Test
     void summarizesSalesRevenueAndExcludesCancelledNotes() throws Exception {
         Warehouse warehouse = mainWarehouse();
         Product product = createProduct();
@@ -905,6 +990,19 @@ class SalesNoteControllerTests {
 
     private JsonNode getJson(String path) throws Exception {
         String response = mockMvc.perform(get(path))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return objectMapper.readTree(response);
+    }
+
+    private JsonNode getJsonWithParams(String... params) throws Exception {
+        var request = get("/api/sales-notes");
+        for (int index = 0; index < params.length; index += 2) {
+            request.param(params[index], params[index + 1]);
+        }
+        String response = mockMvc.perform(request)
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()

@@ -51,8 +51,13 @@ public class SalesNoteController {
             @RequestParam(required = false) DateFilterType dateFilterType,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) Integer year,
-            @RequestParam(required = false) Integer month) {
-        return service.findAll(DatePeriodFactory.from(dateFilterType, date, year, month));
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) String noteNumber,
+            @RequestParam(required = false) String customerName) {
+        return service.findAll(
+                DatePeriodFactory.from(dateFilterType, date, year, month),
+                noteNumber,
+                customerName);
     }
 
     @GetMapping("/next-number")
