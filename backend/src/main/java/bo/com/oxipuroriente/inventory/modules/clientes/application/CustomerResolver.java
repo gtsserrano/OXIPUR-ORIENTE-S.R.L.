@@ -6,20 +6,28 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import bo.com.oxipuroriente.inventory.modules.auditoria.application.AuditLogService;
+import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditAction;
 import bo.com.oxipuroriente.inventory.modules.clientes.domain.Customer;
 import bo.com.oxipuroriente.inventory.modules.clientes.domain.CustomerAlias;
 import bo.com.oxipuroriente.inventory.modules.clientes.infrastructure.CustomerAliasRepository;
 import bo.com.oxipuroriente.inventory.modules.clientes.infrastructure.CustomerRepository;
+import bo.com.oxipuroriente.inventory.modules.clientes.presentation.CustomerResponse;
 
 @Service
 public class CustomerResolver {
 
     private final CustomerRepository customerRepository;
     private final CustomerAliasRepository aliasRepository;
+    private final AuditLogService auditLogService;
 
-    public CustomerResolver(CustomerRepository customerRepository, CustomerAliasRepository aliasRepository) {
+    public CustomerResolver(
+            CustomerRepository customerRepository,
+            CustomerAliasRepository aliasRepository,
+            AuditLogService auditLogService) {
         this.customerRepository = customerRepository;
         this.aliasRepository = aliasRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional(readOnly = true)
@@ -42,7 +50,14 @@ public class CustomerResolver {
             Customer customer = new Customer();
             customer.setName(normalizedName);
             customer.setNormalizedName(normalizedName);
-            return customerRepository.save(customer);
+            Customer savedCustomer = customerRepository.save(customer);
+            auditLogService.record(
+                    AuditAction.CREATE,
+                    "CUSTOMER",
+                    savedCustomer.getId(),
+                    null,
+                    CustomerResponse.from(savedCustomer));
+            return savedCustomer;
         });
     }
 

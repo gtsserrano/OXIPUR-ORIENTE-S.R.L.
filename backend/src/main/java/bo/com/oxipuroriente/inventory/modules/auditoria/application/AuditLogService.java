@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -53,12 +54,34 @@ public class AuditLogService {
             Object previousData,
             Object newData,
             AuditSourceType sourceType) {
-        AuditLog auditLog = new AuditLog();
         AuthenticatedUser actor = currentUser.get().orElse(null);
-        if (actor != null) {
-            auditLog.setActorUserId(actor.id());
-            auditLog.setActorUsername(actor.username());
-        }
+        persist(action, entityType, entityId, previousData, newData, sourceType,
+                actor == null ? null : actor.id(), actor == null ? null : actor.username());
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordAsActor(
+            AuditAction action,
+            String entityType,
+            Object entityId,
+            Long actorUserId,
+            String actorUsername,
+            Object newData) {
+        persist(action, entityType, entityId, null, newData, AuditSourceType.USER, actorUserId, actorUsername);
+    }
+
+    private void persist(
+            AuditAction action,
+            String entityType,
+            Object entityId,
+            Object previousData,
+            Object newData,
+            AuditSourceType sourceType,
+            Long actorUserId,
+            String actorUsername) {
+        AuditLog auditLog = new AuditLog();
+        auditLog.setActorUserId(actorUserId);
+        auditLog.setActorUsername(actorUsername);
         RequestMetadata requestMetadata = currentRequestMetadata();
         auditLog.setEntityType(entityType.trim().toUpperCase(Locale.ROOT));
         auditLog.setEntityId(String.valueOf(entityId));

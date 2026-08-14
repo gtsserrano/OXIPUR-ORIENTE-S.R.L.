@@ -2,6 +2,7 @@ package bo.com.oxipuroriente.inventory.modules.iam.security;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -13,6 +14,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import bo.com.oxipuroriente.inventory.modules.iam.domain.UserRole;
+import bo.com.oxipuroriente.inventory.modules.auditoria.application.AuditLogService;
+import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditAction;
 import bo.com.oxipuroriente.inventory.modules.perfiles.domain.UserProfile;
 import bo.com.oxipuroriente.inventory.modules.perfiles.infrastructure.UserProfileRepository;
 import jakarta.servlet.FilterChain;
@@ -28,14 +31,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenService jwtTokenService;
     private final UserProfileRepository userProfileRepository;
     private final AuthenticationEntryPoint authenticationEntryPoint;
+    private final AuditLogService auditLogService;
 
     public JwtAuthenticationFilter(
             JwtTokenService jwtTokenService,
             UserProfileRepository userProfileRepository,
-            AuthenticationEntryPoint authenticationEntryPoint) {
+            AuthenticationEntryPoint authenticationEntryPoint,
+            AuditLogService auditLogService) {
         this.jwtTokenService = jwtTokenService;
         this.userProfileRepository = userProfileRepository;
         this.authenticationEntryPoint = authenticationEntryPoint;
+        this.auditLogService = auditLogService;
     }
 
     @Override
@@ -80,6 +86,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
         } catch (RuntimeException exception) {
             SecurityContextHolder.clearContext();
+            auditRejectedRequest("Token inválido o vencido");
             authenticationEntryPoint.commence(
                     request,
                     response,
@@ -90,6 +97,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private void reject(HttpServletRequest request, HttpServletResponse response, String reason)
             throws IOException, ServletException {
         SecurityContextHolder.clearContext();
+        auditRejectedRequest(reason);
         authenticationEntryPoint.commence(request, response, new BadCredentialsException(reason));
+    }
+
+    private void auditRejectedRequest(String reason) {
+        try {
+            auditLogService.recordAsActor(
+                    AuditAction.ACCESS_DENIED,
+                    "SECURITY",
+                    "TOKEN",
+                    null,
+                    null,
+                    Map.of("resultado", "Acceso denegado", "motivo", reason));
+        } catch (RuntimeException ignored) {
+            // A failure in the audit trail must not replace the authentication response.
+        }
     }
 }

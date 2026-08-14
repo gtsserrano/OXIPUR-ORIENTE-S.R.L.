@@ -14,6 +14,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import bo.com.oxipuroriente.inventory.modules.iam.application.PasswordService;
+import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditAction;
+import bo.com.oxipuroriente.inventory.modules.auditoria.infrastructure.AuditLogRepository;
 import bo.com.oxipuroriente.inventory.modules.perfiles.domain.UserProfile;
 import bo.com.oxipuroriente.inventory.modules.perfiles.infrastructure.UserProfileRepository;
 import tools.jackson.databind.JsonNode;
@@ -34,6 +36,9 @@ class IamControllerTests {
 
     @Autowired
     private PasswordService passwordService;
+
+    @Autowired
+    private AuditLogRepository auditLogRepository;
 
     @Test
     void logsInWithValidProfileCredentials() throws Exception {
@@ -58,6 +63,8 @@ class IamControllerTests {
         assertThat(response.get("expiresAt").asText()).isNotBlank();
         assertThat(response.get("profile").get("username").asText()).isEqualTo(username);
         assertThat(response.get("profile").get("online").asBoolean()).isTrue();
+        assertThat(auditLogRepository.findAll()).anyMatch(log ->
+                log.getAction() == AuditAction.LOGIN && username.equals(log.getActorUsername()));
     }
 
     @Test
@@ -93,6 +100,12 @@ class IamControllerTests {
                                 }
                                 """.formatted(username)))
                 .andExpect(status().isUnauthorized());
+
+        assertThat(auditLogRepository.findAll()).anyMatch(log ->
+                log.getAction() == AuditAction.LOGIN_FAILED
+                        && username.equals(log.getActorUsername())
+                        && (log.getNewData() == null || !log.getNewData().contains("incorrecta"))
+                        && (log.getPreviousData() == null || !log.getPreviousData().contains("incorrecta")));
     }
 
     private void createProfile(String username, String password) {

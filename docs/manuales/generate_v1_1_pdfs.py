@@ -1,4 +1,4 @@
-"""Genera la documentación oficial PDF del sistema OXIPUR v1.1.2.
+"""Genera la documentación oficial PDF del sistema OXIPUR v1.1.4-snapshot.
 
 El script crea primero los archivos en output/pdf y luego sincroniza las copias
 oficiales incluidas en docs/manuales. No contiene credenciales ni secretos.
@@ -34,8 +34,8 @@ DOCS_DIR = ROOT / "docs" / "manuales"
 OUTPUT_DIR = ROOT / "output" / "pdf"
 LOGO = ROOT / "frontend" / "public" / "oxipur-logo.png"
 
-VERSION = "1.1.2"
-RELEASE_DATE = "13 de agosto de 2026"
+VERSION = "1.1.4-snapshot"
+RELEASE_DATE = "14 de agosto de 2026"
 DOMAIN = "https://oxipur.net"
 
 NAVY = colors.HexColor("#0D2942")
@@ -604,7 +604,7 @@ def technical_story() -> list:
             "de OXIPUR Oriente Inventory Platform.",
             [
                 ("Sistema", "OXIPUR Oriente Inventory Platform"),
-                ("Versión", "1.1.2 - Patch validado"),
+                ("Versión", "1.1.4-snapshot - Candidata validada"),
                 ("Dominio", DOMAIN),
                 ("Estado", "Validado para despliegue"),
                 ("Plataforma", "Web responsiva, API REST y MySQL"),
@@ -627,11 +627,11 @@ def technical_story() -> list:
                 ["Nombre", "OXIPUR Oriente Inventory Platform"],
                 ["Organización", "OXIPUR ORIENTE S.R.L."],
                 ["Tipo", "Aplicación web de gestión operativa e inventario"],
-                ["Versión documentada", "1.1.2 - Patch validado"],
+                ["Versión documentada", "1.1.4-snapshot - Candidata validada"],
                 ["Dominio", DOMAIN],
                 ["Zona horaria", "America/La_Paz (UTC-04:00)"],
                 ["Fecha de corte", RELEASE_DATE],
-                ["Repositorio", "GitHub - etiqueta v1.1.2, commit 76f0c99"],
+                ["Repositorio", "GitHub - etiqueta v1.1.4-snapshot"],
             ],
             widths=[43 * mm, 120 * mm],
             compact=True,
@@ -642,7 +642,7 @@ def technical_story() -> list:
                 "Usuarios con roles, credenciales seguras y presencia operativa.",
                 "Clientes canónicos, alias históricos y control de duplicados.",
                 "Maestro de cilindros, alta manual o confirmada desde una nota, productos y ubicación actual.",
-                "Notas de venta con numeración automática, búsqueda combinable y detalle de entregas y recepciones.",
+                "Notas de venta con numeración automática, búsqueda por un criterio a la vez y detalle de entregas y recepciones.",
                 "Movimientos trazables vinculados a la nota correspondiente.",
                 "Impresión PDF, exportación Excel, auditoría y respaldos automáticos.",
             ]
@@ -767,13 +767,16 @@ def technical_story() -> list:
             widths=[32 * mm, 82 * mm, 49 * mm],
             compact=True,
         ),
-        heading("Cambios acumulados hasta v1.1.2"),
+        heading("Cambios incorporados en v1.1.4-snapshot"),
         bullets(
             [
-                "La consulta de notas admite filtros combinables por fecha, número de nota y cliente.",
+                "Inventario y notas aplican un solo filtro por búsqueda para evitar criterios contradictorios.",
+                "Impresión permite localizar notas por fecha exacta o número antes de generar el PDF.",
+                "La auditoría administrativa presenta una línea de tiempo paginada con actor, acción, módulo, fecha, origen, solicitud e IP.",
+                "Se auditan inicios de sesión exitosos y fallidos, cierres, consultas, búsquedas, impresiones, exportaciones, accesos denegados y operaciones fallidas.",
                 "Un cilindro desconocido nunca se incorpora silenciosamente: requiere confirmación explícita.",
                 "Antes de confirmar se presenta una vista previa con movimiento, serie, producto, capacidad, propiedad y monto.",
-                "Aceptar registra el cilindro y la nota en una sola transacción; rechazar no guarda ninguno de los dos.",
+                "Al pulsar Añadir, una serie nueva completa puede registrarse tras confirmar; rechazar no incorpora la serie ni añade otra línea.",
                 "Un cilindro nuevo exige serie, capacidad mayor que cero y propietario.",
                 "El propietario que comienza con OXIPUR se clasifica como empresa; los demás, como cliente.",
                 "Operador y Administrador pueden acceder al catálogo de cilindros.",
@@ -785,7 +788,7 @@ def technical_story() -> list:
         callout(
             "Regla central",
             "Una nota puede contener entregas y recepciones. La creación registra líneas, movimientos, "
-            "ubicaciones, posibles cilindros nuevos y auditoría dentro de una misma transacción.",
+            "ubicaciones y auditoría dentro de una misma transacción. Las altas de cilindros confirmadas antes de guardar la nota permanecen como datos maestros.",
             "success",
         ),
     ]
@@ -832,7 +835,7 @@ def technical_story() -> list:
         p(
             "La carga inicial permanece integrada como migración Liquibase reproducible. "
             "La actualización v1.1 añadió el changeset 034 para recalcular total_amount desde "
-            "las líneas de cilindros entregados. La v1.1.2 no modifica el esquema ni carga datos: "
+            "las líneas de cilindros entregados. La v1.1.4-snapshot no modifica el esquema ni carga datos: "
             "su comportamiento se implementa en API e interfaz, conservando intacta la base existente."
         ),
         stats(
@@ -856,7 +859,7 @@ def technical_story() -> list:
                 ["Filas históricas sin trazabilidad", "0"],
                 ["Importaciones auditadas", "1"],
                 ["Notas con importe inconsistente después de v1.1", "0"],
-                ["Migraciones nuevas en v1.1.2", "0"],
+                ["Migraciones nuevas en v1.1.4-snapshot", "0"],
                 ["Migración 034 ejecutada", "1 vez - 27/07/2026 11:07:40"],
                 ["Clientes totales verificados", "194"],
             ],
@@ -887,7 +890,7 @@ def technical_story() -> list:
                 ["Contraseñas", "BCrypt costo 12; nunca en texto plano."],
                 ["Roles", "ADMINISTRADOR y OPERADOR con permisos diferenciados."],
                 ["Cilindros", "Lectura y mantenimiento operativo para ambos roles."],
-                ["Auditoría", "Actor, entidad, estado anterior/nuevo, IP, ruta, origen y fecha."],
+                ["Auditoría", "Actor, acción, entidad, datos anterior/nuevo, IP, ruta, origen y fecha."],
                 ["SSH", "Ed25519; root y autenticación por contraseña deshabilitados."],
                 ["Firewall", "UFW: solo 22, 80 y 443."],
                 ["Protección SSH", "Fail2ban activo."],
@@ -903,6 +906,8 @@ def technical_story() -> list:
                 "Creación, actualización y anulación de notas de venta.",
                 "Altas y cambios de clientes, productos y perfiles.",
                 "Importación histórica y normalización administrativa.",
+                "Inicio de sesión exitoso o fallido, cierre de sesión y rechazo de tokens inválidos.",
+                "Consultas, búsquedas, impresión, exportación, accesos denegados y operaciones HTTP fallidas.",
             ]
         ),
         callout(
@@ -926,7 +931,7 @@ def technical_story() -> list:
                 ["Retención", "30 días en /opt/oxipur/backups."],
                 ["Persistencia", "Volumen Docker oxipur_mysql_data."],
                 ["Respaldo previo v1.1", "oxipur_inventory_20260727_110441.sql.gz"],
-                ["Respaldo previo v1.1.2", "Obligatorio antes del despliegue"],
+                ["Respaldo previo v1.1.4-snapshot", "Obligatorio antes del despliegue"],
             ],
             widths=[48 * mm, 115 * mm],
         ),
@@ -939,16 +944,16 @@ def technical_story() -> list:
                 ("OK", "API de estado"),
             ]
         ),
-        heading("Evidencias de validación v1.1.2"),
+        heading("Evidencias de validación v1.1.4-snapshot"),
         bullets(
             [
                 "Compilación Maven y 66 pruebas sin fallos, errores ni omisiones.",
                 "Build Vite de producción completado.",
                 "MySQL, backend y frontend levantados en Docker con health checks saludables.",
                 "GET /api/status respondió status ok en el entorno integral de validación.",
-                "Pruebas específicas cubren filtros combinados y rechazo de cilindros sin confirmación.",
+                "Pruebas específicas cubren login auditado, consultas auditadas, accesos denegados y alta automática de clientes.",
                 "Docker Compose validado y paquete de publicación verificado con SHA-256.",
-                "Commit 76f0c99 y etiqueta v1.1.2 publicados en el repositorio.",
+                "Código preparado para la etiqueta v1.1.4-snapshot del repositorio.",
             ],
             compact=True,
         ),
@@ -1008,13 +1013,18 @@ def technical_story() -> list:
                     "13/08/2026",
                     "Filtros por nota y cliente; confirmación, vista previa y bloqueo seguro para cilindros desconocidos.",
                 ],
+                [
+                    "1.1.4-snapshot",
+                    "14/08/2026",
+                    "Auditoría ampliada, filtros exclusivos, búsqueda previa de impresión y alta guiada de cilindros.",
+                ],
             ],
             widths=[24 * mm, 36 * mm, 103 * mm],
         ),
         Spacer(1, 7),
         callout(
             "Estado de entrega",
-            "Versión 1.1.2 validada y empaquetada para producción. Su despliegue conserva la base histórica, "
+            "Versión 1.1.4-snapshot validada como candidata de publicación. Su despliegue conserva la base histórica, "
             "los usuarios, los hashes de contraseña, la auditoría y el volumen persistente.",
             "success",
         ),
@@ -1023,7 +1033,7 @@ def technical_story() -> list:
             [
                 ["Elaborado para", "OXIPUR ORIENTE S.R.L."],
                 ["Documento", "Ficha técnica de especificaciones"],
-                ["Versión", "1.1.2"],
+                ["Versión", "1.1.4-snapshot"],
                 ["Clasificación", "Uso interno"],
             ],
             widths=[48 * mm, 115 * mm],
@@ -1040,14 +1050,14 @@ def detailed_user_appendices(story: list) -> list:
         "25",
         "Confirmación de cilindros no registrados",
         "TODOS",
-        "Procedimiento completo de la v1.1.2 para decidir de forma segura si una serie nueva debe incorporarse.",
+        "Procedimiento completo para decidir de forma segura si una serie nueva debe incorporarse desde una nota.",
     )
     story += [
         heading("Cuándo aparece la ventana"),
         p(
-            "La ventana aparece después de pulsar Crear nota cuando al menos una serie escrita no existe en el "
-            "catálogo activo de cilindros. Antes de mostrarla, el sistema ya comprobó cliente, fecha, líneas, "
-            "productos, capacidades, propietarios, importes y cilindros repetidos."
+            "La ventana puede aparecer al pulsar Añadir después de completar una serie que no existe en el catálogo, "
+            "o al pulsar Crear nota si todavía quedan series desconocidas. Antes de continuar, compare serie, "
+            "movimiento, producto, capacidad, propietario e importe mostrados en la vista previa."
         ),
         table(
             ["Dato de la vista previa", "Qué debe comparar", "Riesgo que evita"],
@@ -1066,17 +1076,17 @@ def detailed_user_appendices(story: list) -> list:
         steps(
             [
                 ("Compare cada dato", "No confirme basándose únicamente en la serie."),
-                ("Pulse Sí, agregar y crear nota", "El botón cambia a Registrando; espere sin volver a pulsarlo."),
-                ("Espere el check verde", "Confirma que el cilindro y la nota se guardaron correctamente."),
-                ("Abra Notas registradas", "Busque el número recién asignado y abra el detalle."),
-                ("Revise Cilindros e Inventario", "Compruebe que la serie existe y quedó en la ubicación correspondiente."),
+                ("Pulse Sí", "En Añadir verá Sí, registrar cilindro; al guardar la nota verá Sí, agregar y crear nota."),
+                ("Espere el check verde", "Confirma el alta del cilindro o la creación conjunta de cilindro y nota, según el punto del flujo."),
+                ("Continúe la nota", "Si confirmó desde Añadir, se incorpora una línea vacía para el siguiente cilindro."),
+                ("Compruebe el resultado", "Revise Cilindros; después de guardar la nota, revise también Notas e Inventario."),
             ]
         ),
         heading("Si existe cualquier duda: elegir No"),
         steps(
             [
-                ("Pulse No, cancelar", "No se incorpora la serie."),
-                ("Observe la X roja", "Confirma que la nota tampoco fue creada."),
+                ("Pulse No", "No se incorpora la serie; el texto del botón depende del punto del flujo."),
+                ("Observe la X roja", "Confirma que no se añadió la serie ni avanzó la acción solicitada."),
                 ("Regrese al formulario", "Los datos permanecen disponibles para corregir la línea."),
                 ("Corrija o elimine", "Cambie la serie, capacidad, propiedad o quite la fila."),
                 ("Vuelva a crear", "Solo cuando toda la información esté verificada."),
@@ -1085,7 +1095,7 @@ def detailed_user_appendices(story: list) -> list:
         callout(
             "Garantía de consistencia",
             "El backend rechaza una nota que contenga una serie desconocida si no recibió confirmación. "
-            "La interfaz no puede guardar la nota por accidente después de pulsar No. Si hay varias series nuevas, "
+            "La interfaz no puede guardar la nota por accidente después de pulsar No. Si al final hay varias series nuevas, "
             "la ventana las muestra juntas y la decisión se aplica al conjunto; revise todas antes de aceptar.",
             "success",
         ),
@@ -1097,24 +1107,23 @@ def detailed_user_appendices(story: list) -> list:
         "26",
         "Búsqueda avanzada de notas",
         "TODOS",
-        "Utilice fecha, número y cliente por separado o al mismo tiempo para localizar rápidamente una operación.",
+        "Utilice exactamente un criterio por búsqueda: fecha, número o cliente.",
     )
     story += [
-        heading("Principio de combinación"),
+        heading("Principio de exclusividad"),
         p(
-            "Los criterios se combinan con la regla Y. Por ejemplo, si selecciona agosto de 2026, escribe 675 en "
-            "Número de nota y BETHEL en Cliente, solo aparecen notas que estén en agosto, contengan 675 en el "
-            "número y contengan BETHEL en el nombre del cliente."
+            "Al comenzar a completar un criterio, los demás quedan bloqueados. Esto evita búsquedas demasiado "
+            "restrictivas y hace evidente qué dato se está utilizando. Para cambiar de criterio, vacíe el actual "
+            "o pulse Limpiar."
         ),
         table(
             ["Necesidad", "Fecha", "Número", "Cliente", "Acción"],
             [
-                ["Conozco el número completo", "Sin filtro", "NV-006775", "Vacío", "Aplicar"],
-                ["Conozco parte del número", "Sin filtro", "6775", "Vacío", "Aplicar"],
-                ["Quiero todas las notas de un cliente", "Sin filtro", "Vacío", "BETHEL", "Aplicar"],
-                ["Cliente durante un mes", "Mes / año", "Vacío", "BETHEL", "Aplicar"],
-                ["Nota aproximada de un cliente", "Sin filtro", "67", "BETHEL", "Aplicar"],
-                ["Volver a ver todo", "Cualquiera", "Cualquiera", "Cualquiera", "Limpiar"],
+                ["Conozco el número completo", "Vacío", "NV-006775", "Vacío", "Buscar"],
+                ["Conozco parte del número", "Vacío", "6775", "Vacío", "Buscar"],
+                ["Quiero notas de un cliente", "Vacío", "Vacío", "BETHEL", "Buscar"],
+                ["Quiero notas de un mes", "Mes / año", "Vacío", "Vacío", "Buscar"],
+                ["Cambiar de criterio", "Cualquiera", "Cualquiera", "Cualquiera", "Limpiar"],
             ],
             widths=[48 * mm, 31 * mm, 29 * mm, 29 * mm, 26 * mm],
             compact=True,
@@ -1123,9 +1132,9 @@ def detailed_user_appendices(story: list) -> list:
         steps(
             [
                 ("Empiece con el dato más seguro", "Número completo si lo tiene; en caso contrario, cliente."),
-                ("Pulse Aplicar", "Revise la cantidad de resultados antes de añadir más criterios."),
-                ("Refine", "Agregue fecha o parte del otro campo si aparecen demasiadas notas."),
-                ("Amplíe si no aparece", "Quite caracteres o seleccione Sin filtro en fecha."),
+                ("Pulse Buscar", "Revise la cantidad de resultados obtenidos con ese único criterio."),
+                ("Refine", "Si aparecen demasiadas notas, escriba una parte más específica del mismo criterio."),
+                ("Cambie si no aparece", "Pulse Limpiar y pruebe otro criterio; no intente completar dos a la vez."),
                 ("Abra el detalle", "Verifique cliente, fecha, líneas, estado y origen; no se base solo en la fila."),
             ]
         ),
@@ -1139,7 +1148,7 @@ def detailed_user_appendices(story: list) -> list:
                 "Confirme si la nota fue anulada: las anuladas siguen visibles y llevan su estado correspondiente.",
             ]
         ),
-        callout("Tecla Enter", "En Número de nota o Cliente puede pulsar Enter para ejecutar la misma búsqueda que Aplicar."),
+        callout("Control visual", "El aviso superior indica el filtro activo y explica que debe limpiarlo antes de habilitar los demás."),
     ]
     end_page(story)
 
@@ -1208,8 +1217,9 @@ def detailed_user_appendices(story: list) -> list:
                 ["Propiedad vacía", "No puede clasificarse el cilindro.", "Indique OXIPUR o propietario externo.", "Nada"],
                 ["Serie repetida", "Un cilindro no puede moverse dos veces en una nota.", "Quite o corrija una fila.", "Nada"],
                 ["Serie inactiva", "El catálogo la excluye de nuevas operaciones.", "Revise Cilindros con un responsable.", "Nada"],
-                ["X roja", "El usuario rechazó el alta.", "Corrija o quite la serie.", "Nada"],
-                ["Check verde", "La transacción terminó correctamente.", "Solo verificar el resultado.", "Nota, cilindro y movimientos"],
+                ["X roja", "El usuario rechazó el alta.", "Corrija o quite la serie.", "No se registra el cilindro"],
+                ["Check verde al añadir", "El alta maestra terminó correctamente.", "Continúe o guarde la nota.", "Cilindro"],
+                ["Check verde al crear", "La transacción de nota terminó correctamente.", "Solo verificar el resultado.", "Nota, cilindro y movimientos"],
             ],
             widths=[36 * mm, 47 * mm, 52 * mm, 28 * mm],
             compact=True,
@@ -1218,7 +1228,7 @@ def detailed_user_appendices(story: list) -> list:
         steps(
             [
                 ("No vuelva a pulsar inmediatamente", "Evite producir un segundo intento mientras desconoce el resultado."),
-                ("Abra Notas registradas", "Busque por cliente, fecha y el número que estaba visible."),
+                ("Abra Notas registradas", "Busque primero por el número que estaba visible; use un solo criterio."),
                 ("Si aparece", "Abra el detalle y continúe; el registro fue exitoso."),
                 ("Si no aparece", "Revise Inventario y Cilindros para confirmar que no hubo cambio."),
                 ("Solo entonces reintente", "Use el formulario conservado o vuelva a completar la operación."),
@@ -1381,9 +1391,9 @@ def detailed_user_appendices(story: list) -> list:
         table(
             ["Pregunta", "Respuesta"],
             [
-                ["¿Puedo buscar sin fecha?", "Sí. Elija Sin filtro y use número, cliente o ambos."],
+                ["¿Puedo buscar sin fecha?", "Sí. Use número o cliente, uno por vez."],
                 ["¿Puedo escribir solo parte del cliente?", "Sí. La búsqueda acepta coincidencias parciales."],
-                ["¿Qué ocurre al pulsar No para un cilindro nuevo?", "No se crea el cilindro y tampoco la nota."],
+                ["¿Qué ocurre al pulsar No para un cilindro nuevo?", "No se crea el cilindro ni avanza la acción solicitada."],
                 ["¿Puedo corregir las líneas de una nota?", "No directamente: anule y cree una nota correcta."],
                 ["¿Cerrar el navegador borra datos?", "No. Todo lo confirmado permanece en MySQL del VPS."],
                 ["¿Mi computadora debe quedar encendida?", "No. El servidor funciona independientemente."],
@@ -1433,7 +1443,7 @@ def user_story() -> list:
             "imprimir documentos y administrar catálogos y perfiles.",
             [
                 ("Sistema", "OXIPUR Oriente Inventory Platform"),
-                ("Versión", "1.1.2 - Patch validado"),
+                ("Versión", "1.1.4-snapshot - Candidata validada"),
                 ("Sitio", DOMAIN),
                 ("Usuarios", "Administrador y Operador"),
                 ("Cobertura", "Todas las funciones visibles"),
@@ -1451,16 +1461,19 @@ def user_story() -> list:
                 ["Acceso", "02-03", "Ingreso, sesión, navegación y controles."],
                 ["Consulta", "04-07", "Centro operativo, filtros, inventario y clientes."],
                 ["Notas de venta", "08-16", "Creación, detalle, edición, impresión y Excel."],
-                ["Administración", "17-21", "Utilidades, cilindros, productos y perfiles."],
+                ["Administración", "17-21B", "Utilidades, cilindros, productos, perfiles y auditoría."],
                 ["Ayuda", "22-24", "Perfil, mensajes, prácticas y referencia."],
                 ["Guía avanzada", "25-32", "Confirmaciones, escenarios, recuperación, seguridad, preguntas y glosario."],
             ],
             widths=[37 * mm, 28 * mm, 98 * mm],
         ),
-        heading("Novedades de la versión 1.1.2"),
+        heading("Novedades de la versión 1.1.4-snapshot"),
         bullets(
             [
-                "Búsqueda de notas por número, cliente y fecha, de forma individual o combinada.",
+                "Filtros exclusivos: se utiliza ubicación, serie, cliente, fecha o número de uno en uno según el módulo.",
+                "Impresión con búsqueda previa por fecha exacta o número de nota.",
+                "Nueva vista administrativa de Auditoría con historial paginado y detalle del evento.",
+                "Registro de accesos, cierres, consultas, búsquedas, impresiones, exportaciones, rechazos y fallos.",
                 "Confirmación obligatoria antes de incorporar un cilindro desconocido.",
                 "Vista previa completa del cilindro y respuesta visual verde o roja según la decisión.",
                 "Capacidad y propiedad obligatorias para cilindros nuevos.",
@@ -1555,7 +1568,7 @@ def user_story() -> list:
     ]
     end_page(story)
 
-    chapter_intro(story, "05", "Filtros por día, mes o año", "TODOS", "El mismo control aparece en movimientos, notas registradas, exportación y utilidades.")
+    chapter_intro(story, "05", "Filtros de búsqueda", "TODOS", "Los módulos presentan controles distintos y, cuando corresponde, permiten un solo criterio por consulta.")
     story += [
         table(
             ["Tipo", "Campos requeridos", "Resultado"],
@@ -1578,6 +1591,7 @@ def user_story() -> list:
             ]
         ),
         callout("Sin resultados", "Compruebe el año, limpie los filtros y confirme la fecha real de la operación.", "warning"),
+        callout("Un criterio a la vez", "En Inventario, Notas registradas e Impresión, completar un filtro bloquea los demás. Pulse Limpiar para cambiar de criterio.", "success"),
     ]
     end_page(story)
 
@@ -1586,10 +1600,11 @@ def user_story() -> list:
         steps(
             [
                 ("Abra Inventario", "Use el menú lateral."),
-                ("Elija Ubicación", "Todas, PLANTA o CLIENTE."),
-                ("Escriba Cliente", "Opcional; puede combinarse con CLIENTE."),
-                ("Escriba Serie", "Opcional; use el número físico del cilindro."),
+                ("Elija un criterio", "Ubicación, Cliente o Serie; utilice solo uno."),
+                ("Complete el criterio", "En Cliente puede escribir una parte; en Serie use el número físico."),
+                ("Observe el bloqueo", "Los otros campos quedan deshabilitados mientras exista un filtro activo."),
                 ("Pulse Buscar", "Se mostrarán coincidencias."),
+                ("Cambie de criterio", "Pulse Limpiar para volver a habilitar todos los campos."),
             ]
         ),
         heading("Información mostrada"),
@@ -1714,10 +1729,10 @@ def user_story() -> list:
                 ("Seleccione producto", "Solo aparecen productos activos."),
                 ("Complete datos nuevos", "Si no existe, ingrese capacidad y propiedad."),
                 ("Ingrese monto", "El sistema lo suma al Total venta."),
-                ("Agregue o quite líneas", "Use Agregar línea o la X de cada fila."),
+                ("Añada otra línea", "Pulse Añadir. Si la última serie es nueva, complete capacidad y propiedad y decida en la confirmación."),
             ]
         ),
-        callout("Alta confirmada", "Un cilindro nuevo solo se crea cuando el usuario acepta la ventana de confirmación. La creación del cilindro, su movimiento y la nota forman una sola operación.", "success"),
+        callout("Alta confirmada", "Un cilindro nuevo solo se crea cuando el usuario acepta. Si confirma al pulsar Añadir, el cilindro queda registrado antes de guardar la nota; el movimiento se crea recién al guardar la nota.", "success"),
     ]
     end_page(story)
 
@@ -1786,7 +1801,7 @@ def user_story() -> list:
                 ["Fecha", "Día, mes, año o sin filtro.", "Mes: agosto de 2026"],
                 ["Número de nota", "Busca coincidencias parciales, sin exigir el número completo.", "675 busca NV-006750 y similares"],
                 ["Cliente", "Busca una parte del nombre sin distinguir mayúsculas.", "BETHEL encuentra CLINICA BETHEL"],
-                ["Combinación", "Todos los criterios escritos deben cumplirse al mismo tiempo.", "Agosto + 675 + BETHEL"],
+                ["Exclusividad", "Al completar un criterio, los demás quedan bloqueados.", "Limpie Fecha antes de usar Cliente"],
             ],
             widths=[36 * mm, 79 * mm, 48 * mm],
             compact=True,
@@ -1794,9 +1809,9 @@ def user_story() -> list:
         steps(
             [
                 ("Abra Notas de venta", "Seleccione Notas de venta registradas."),
-                ("Elija el período", "Día, mes, año o sin filtro; puede dejarlo sin filtro."),
-                ("Escriba número o cliente", "Puede usar uno, ambos o ninguno. No necesita escribir el texto completo."),
-                ("Pulse Aplicar", "Se muestran número, cliente, fecha, total, estado y acciones."),
+                ("Elija un criterio", "Fecha, Número o Cliente. Debe existir exactamente uno para habilitar Buscar."),
+                ("Complete el criterio", "En número o cliente no necesita escribir el texto completo."),
+                ("Pulse Buscar", "Se muestran número, cliente, fecha, total, estado y acciones."),
                 ("Ajuste la búsqueda", "Si no encuentra la nota, borre parte del número o nombre y vuelva a aplicar."),
                 ("Restablezca", "Pulse Limpiar para borrar fecha, número y cliente juntos."),
                 ("Abra el detalle", "Pulse la fila o el ojo."),
@@ -1812,7 +1827,7 @@ def user_story() -> list:
             ],
             widths=[44 * mm, 119 * mm],
         ),
-        callout("Búsqueda v1.1.2", "Número, cliente y fecha son combinables. Si completa los tres, una nota debe cumplir los tres criterios para aparecer.", "success"),
+        callout("Búsqueda v1.1.4-snapshot", "Número, cliente y fecha se usan por separado. El aviso identifica el criterio activo y Limpiar permite elegir otro.", "success"),
         callout("Importes", "Total venta corresponde a la suma de montos de cilindros entregados. Los importes históricos fueron recalculados y validados.", "success"),
         callout("Estado ANULADA", "La nota permanece visible para conservar el historial; sus movimientos originales fueron compensados."),
     ]
@@ -1848,7 +1863,9 @@ def user_story() -> list:
     story += [
         steps(
             [
-                ("Abra Impresión", "La tabla muestra número, cliente, fecha, importe total y estado."),
+                ("Abra Impresión", "La tabla comienza vacía para evitar cargar miles de notas."),
+                ("Elija un filtro", "Use una fecha exacta o un número de nota, nunca ambos a la vez."),
+                ("Pulse Buscar", "La tabla muestra número, cliente, fecha, importe total y estado de las coincidencias."),
                 ("Seleccione una nota", "Marque el círculo de la primera columna."),
                 ("Revise la selección", "Confirme número, cliente e importe."),
                 ("Pulse Imprimir nota", "Se consulta el detalle completo y se abre el PDF."),
@@ -2047,6 +2064,45 @@ def user_story() -> list:
     ]
     end_page(story)
 
+    chapter_intro(story, "21B", "Consultar la auditoría", "ADMIN", "Revise quién realizó cada acción y qué información quedó registrada.")
+    story += [
+        table(
+            ["Elemento", "Qué muestra"],
+            [
+                ["Eventos registrados", "Cantidad total de eventos conservados."],
+                ["Usuarios en esta página", "Actores distintos visibles en los 50 eventos actuales."],
+                ["Tarjeta de evento", "Fecha, hora, usuario, acción, módulo, registro y origen."],
+                ["Detalle", "Solicitud, dirección IP y comparación Antes / Después cuando existen datos."],
+                ["Paginación", "Anterior y Siguiente para recorrer el historial sin cargarlo completo."],
+            ],
+            widths=[47 * mm, 116 * mm],
+        ),
+        heading("Cómo revisar un evento"),
+        steps(
+            [
+                ("Abra Auditoría", "La opción aparece únicamente para Administrador."),
+                ("Lea la tarjeta", "Compruebe usuario, acción, módulo y hora antes de abrirla."),
+                ("Pulse la tarjeta o Ver detalle", "Se abre la información técnica y los cambios registrados."),
+                ("Compare Antes y Después", "Un guion significa que el valor no existía o no fue incluido en el evento."),
+                ("Cierre el detalle", "Vuelva al historial y use la paginación si necesita eventos anteriores."),
+                ("Pulse Actualizar", "Consulta nuevamente la página actual e incluye eventos recientes."),
+            ]
+        ),
+        heading("Acciones reconocibles"),
+        bullets(
+            [
+                "Inicio de sesión, acceso rechazado y cierre de sesión.",
+                "Consulta, búsqueda, impresión y exportación.",
+                "Creación, modificación, desactivación, anulación, unificación e importación.",
+                "Acceso denegado y operación fallida.",
+            ],
+            compact=True,
+        ),
+        callout("Solo lectura", "La pantalla permite consultar, pero no editar ni eliminar eventos. Abrir o actualizar Auditoría también deja trazabilidad de consulta.", "success"),
+        callout("Datos sensibles", "Las contraseñas y sus hashes no se incluyen en los datos de auditoría. No publique capturas con direcciones IP o información empresarial.", "warning"),
+    ]
+    end_page(story)
+
     chapter_intro(story, "22", "Perfil personal y presencia", "TODOS", "Consulte los datos de la sesión actual.")
     story += [
         table(
@@ -2097,7 +2153,7 @@ def user_story() -> list:
                 ["Cilindro repetido", "Quite una línea o use la serie correcta."],
                 ["No abre impresión", "Habilite ventanas emergentes para oxipur.net."],
                 ["No descarga Excel", "Revise Descargas y bloqueos del navegador."],
-                ["No hay resultados", "Limpie número, cliente y fecha; luego aplique otra vez."],
+                ["No hay resultados", "Limpie el criterio activo y vuelva a buscar con un dato más amplio u otro criterio."],
             ],
             widths=[58 * mm, 105 * mm],
             compact=True,
@@ -2138,6 +2194,7 @@ def user_story() -> list:
                 ["1.0", "23/07/2026", "Primera publicación productiva."],
                 ["1.1", "27/07/2026", "Cilindros automáticos, acceso operativo, totales e impresión mejorada."],
                 ["1.1.2", "13/08/2026", "Filtros de notas y confirmación segura para cilindros desconocidos."],
+                ["1.1.4-snapshot", "14/08/2026", "Auditoría ampliada, filtros exclusivos, búsqueda de impresión y alta guiada."],
             ],
             widths=[25 * mm, 36 * mm, 102 * mm],
         ),

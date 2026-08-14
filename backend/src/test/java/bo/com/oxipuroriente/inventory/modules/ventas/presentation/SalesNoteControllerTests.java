@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import bo.com.oxipuroriente.inventory.modules.almacenes.domain.Warehouse;
 import bo.com.oxipuroriente.inventory.modules.almacenes.infrastructure.WarehouseRepository;
+import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditAction;
 import bo.com.oxipuroriente.inventory.modules.auditoria.infrastructure.AuditLogRepository;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.Cylinder;
 import bo.com.oxipuroriente.inventory.modules.cilindros.domain.CylinderLocationType;
@@ -423,7 +424,12 @@ class SalesNoteControllerTests {
         assertThat(collectedCylinderRepository.count()).isEqualTo(collectedBefore + 1);
         assertThat(movementRepository.count()).isEqualTo(movementsBefore + 2);
         assertThat(customerRepository.count()).isEqualTo(customersBefore + 1);
-        assertThat(auditLogRepository.count()).isEqualTo(auditsBefore + 1);
+        assertThat(auditLogRepository.count()).isEqualTo(auditsBefore + 2);
+        assertThat(auditLogRepository.findAll()).anySatisfy(audit -> {
+            assertThat(audit.getAction()).isEqualTo(AuditAction.CREATE);
+            assertThat(audit.getEntityType()).isEqualTo("CUSTOMER");
+            assertThat(audit.getNewData()).contains(customerName);
+        });
     }
 
     @Test

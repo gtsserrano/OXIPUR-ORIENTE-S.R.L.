@@ -12,6 +12,7 @@ import {
   Edit3,
   Eye,
   Gauge,
+  History,
   LayoutDashboard,
   Banknote,
   CheckCircle2,
@@ -64,20 +65,23 @@ const navItems = [
   { id: "cylinders", label: "Cilindros", icon: Gauge },
   { id: "products", label: "Productos", icon: Package },
   { id: "profiles", label: "Perfiles", icon: Users },
+  { id: "audit", label: "Auditoría", icon: History },
   { id: "profile", label: "Perfil", icon: UserRound }
 ];
 
 const PERMISSIONS = {
   MANAGE_CATALOGS: "MANAGE_CATALOGS",
   MANAGE_PROFILES: "MANAGE_PROFILES",
-  VIEW_UTILITIES: "VIEW_UTILITIES"
+  VIEW_UTILITIES: "VIEW_UTILITIES",
+  VIEW_AUDIT: "VIEW_AUDIT"
 };
 
 const ROLE_PERMISSIONS = {
   ADMINISTRADOR: new Set([
     PERMISSIONS.MANAGE_CATALOGS,
     PERMISSIONS.MANAGE_PROFILES,
-    PERMISSIONS.VIEW_UTILITIES
+    PERMISSIONS.VIEW_UTILITIES,
+    PERMISSIONS.VIEW_AUDIT
   ]),
   OPERADOR: new Set()
 };
@@ -85,7 +89,8 @@ const ROLE_PERMISSIONS = {
 const PAGE_PERMISSIONS = {
   utilities: PERMISSIONS.VIEW_UTILITIES,
   products: PERMISSIONS.MANAGE_CATALOGS,
-  profiles: PERMISSIONS.MANAGE_PROFILES
+  profiles: PERMISSIONS.MANAGE_PROFILES,
+  audit: PERMISSIONS.VIEW_AUDIT
 };
 
 const monthOptions = [
@@ -165,10 +170,13 @@ function App() {
   const [forms, setForms] = useState(emptyForm);
   const [profileEditorClosing, setProfileEditorClosing] = useState(false);
   const [cylinderEditorClosing, setCylinderEditorClosing] = useState(false);
-  const [salesDateFilter, setSalesDateFilter] = useState(createSalesNoteFilter("MONTH"));
+  const [salesDateFilter, setSalesDateFilter] = useState(createSalesNoteFilter());
   const [movementDateFilter, setMovementDateFilter] = useState(createDateFilter("MONTH"));
   const [utilityDateFilter, setUtilityDateFilter] = useState(createDateFilter("MONTH"));
   const [selectedPrintNoteId, setSelectedPrintNoteId] = useState("");
+  const [printingFilter, setPrintingFilter] = useState(createPrintingNoteFilter(false));
+  const [printingNotes, setPrintingNotes] = useState([]);
+  const [printingLoading, setPrintingLoading] = useState(false);
   const [missingCylinderDialog, setMissingCylinderDialog] = useState(null);
   const visibleNavItems = useMemo(() => filterNavItemsForSession(navItems, session), [session?.profile?.roleName]);
 
@@ -177,6 +185,7 @@ function App() {
     try {
       const canManageProfiles = hasPermission(session, PERMISSIONS.MANAGE_PROFILES);
       const canViewUtilities = hasPermission(session, PERMISSIONS.VIEW_UTILITIES);
+      const hasSalesNoteFilter = exclusiveFilterKey(salesDateFilter, ["dateFilterType", "noteNumber", "customerName"]);
       const salesDateQuery = buildSalesNoteQuery(salesDateFilter);
       const movementDateQuery = buildDateQuery(movementDateFilter);
       const utilityDateQuery = buildDateQuery(utilityDateFilter);
@@ -186,7 +195,7 @@ function App() {
         api("/api/customers"),
         api("/api/inventory/cylinders"),
         api(`/api/inventory-movements${movementDateQuery}`),
-        api(`/api/sales-notes${salesDateQuery}`),
+        hasSalesNoteFilter ? api(`/api/sales-notes${salesDateQuery}`) : Promise.resolve([]),
         api("/api/operational-alerts"),
         canManageProfiles ? api("/api/profiles") : Promise.resolve([]),
         canViewUtilities ? api(`/api/utilities/summary${utilityDateQuery}`) : Promise.resolve(null)
@@ -220,6 +229,11 @@ function App() {
     if (!session || active !== "sales-create" || forms.sale.id) return;
     loadNextSalesNoteNumber().catch((error) => notify(error.message));
   }, [session?.accessToken, active, forms.sale.id]);
+
+  useEffect(() => {
+    if (!session || active !== "printing") return;
+    searchPrintingNotes(printingFilter);
+  }, [session?.accessToken, active]);
 
   useEffect(() => {
     function handleAuthExpired() {
@@ -361,16 +375,39 @@ function App() {
 
   async function searchInventory(nextFilters = filters) {
     const params = new URLSearchParams();
-    Object.entries(nextFilters).forEach(([key, value]) => {
-      if (value) params.set(key, value);
-    });
+    const activeFilter = exclusiveFilterKey(nextFilters, ["locationType", "customerName", "serialNumber"]);
+    if (activeFilter) params.set(activeFilter, nextFilters[activeFilter]);
     const inventory = await api(`/api/inventory/cylinders${params.toString() ? `?${params}` : ""}`);
     setState((value) => ({ ...value, inventory }));
   }
 
   async function searchSalesNotes(nextFilter = salesDateFilter) {
+    if (!exclusiveFilterKey(nextFilter, ["dateFilterType", "noteNumber", "customerName"])) {
+      setState((value) => ({ ...value, salesNotes: [] }));
+      return;
+    }
     const salesNotes = await api(`/api/sales-notes${buildSalesNoteQuery(nextFilter)}`);
     setState((value) => ({ ...value, salesNotes }));
+  }
+
+  async function searchPrintingNotes(nextFilter = printingFilter) {
+    if (!exclusiveFilterKey(nextFilter, ["date", "noteNumber"])) {
+      setPrintingNotes([]);
+      setSelectedPrintNoteId("");
+      return;
+    }
+    setPrintingLoading(true);
+    try {
+      const notes = await api(`/api/sales-notes${buildPrintingNoteQuery(nextFilter)}`);
+      setPrintingNotes(notes);
+      setSelectedPrintNoteId((current) => (
+        notes.some((note) => String(note.id) === String(current)) ? current : ""
+      ));
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setPrintingLoading(false);
+    }
   }
 
   async function loadNextSalesNoteNumber() {
@@ -556,6 +593,43 @@ function App() {
     }
   }
 
+  function requestAddSaleCylinderLine(field, template) {
+    const lines = forms.sale[field] || [];
+    const line = lines[lines.length - 1];
+    const serialNumber = String(line?.cylinderNumber || "").trim();
+    const registeredCylinder = findCylinderByNumber(state.cylinders, serialNumber);
+
+    if (!serialNumber || registeredCylinder) {
+      addSaleLine(setForms, field, template);
+      return;
+    }
+
+    if (line.capacityM3 === "" || Number(line.capacityM3) <= 0 || !String(line.ownerName || "").trim()) {
+      notify(`Completa la capacidad y la propiedad del cilindro nuevo ${serialNumber}.`);
+      return;
+    }
+
+    setMissingCylinderDialog({
+      status: "confirm",
+      action: "add-line",
+      lineField: field,
+      cylinder: {
+        serialNumber,
+        capacityM3: Number(line.capacityM3),
+        ownerName: uppercaseCustomerName(line.ownerName)
+      },
+      cylinders: [{
+        movementType: field === "deliveredCylinders" ? "ENTREGADO" : "RECIBIDO",
+        serialNumber,
+        productName: findById(state.products, line.productId)?.name || "-",
+        capacityM3: Number(line.capacityM3),
+        ownerName: uppercaseCustomerName(line.ownerName),
+        amount: field === "deliveredCylinders" && line.amount !== "" ? Number(line.amount) : null
+      }],
+      error: ""
+    });
+  }
+
   async function createSale(event) {
     event.preventDefault();
     const form = forms.sale;
@@ -675,10 +749,39 @@ function App() {
   }
 
   async function confirmMissingCylinderRegistration() {
-    if (!missingCylinderDialog?.payload || missingCylinderDialog.status === "processing") return;
+    if (!missingCylinderDialog || missingCylinderDialog.status === "processing") return;
     const pendingDialog = missingCylinderDialog;
     setMissingCylinderDialog({ ...pendingDialog, status: "processing", error: "" });
     try {
+      if (pendingDialog.action === "add-line") {
+        const registeredCylinder = await api("/api/cylinders", {
+          method: "POST",
+          body: {
+            serialNumber: pendingDialog.cylinder.serialNumber,
+            capacityM3: pendingDialog.cylinder.capacityM3,
+            owner: pendingDialog.cylinder.ownerName,
+            price: null,
+            ownerType: isCompanyCylinderOwner(pendingDialog.cylinder.ownerName) ? "COMPANY" : "CUSTOMER"
+          }
+        });
+        setState((current) => ({
+          ...current,
+          cylinders: [
+            ...current.cylinders.filter((item) => normalizeCylinderNumberKey(item.serialNumber) !== normalizeCylinderNumberKey(registeredCylinder.serialNumber)),
+            registeredCylinder
+          ]
+        }));
+        addSaleLine(
+          setForms,
+          pendingDialog.lineField,
+          pendingDialog.lineField === "deliveredCylinders" ? emptyDeliveredLine : emptyCollectedLine
+        );
+        setMissingCylinderDialog({ ...pendingDialog, status: "success", error: "" });
+        window.setTimeout(() => setMissingCylinderDialog(null), 2200);
+        return;
+      }
+
+      if (!pendingDialog.payload) return;
       await submitNewSale(
         { ...pendingDialog.payload, registerMissingCylinders: true },
         { showToast: false }
@@ -887,6 +990,7 @@ function App() {
         salesDateFilter={salesDateFilter}
         setSalesDateFilter={setSalesDateFilter}
         searchSalesNotes={searchSalesNotes}
+        requestAddSaleCylinderLine={requestAddSaleCylinderLine}
       />
     ),
     "sales-registered": (
@@ -905,6 +1009,7 @@ function App() {
         salesDateFilter={salesDateFilter}
         setSalesDateFilter={setSalesDateFilter}
         searchSalesNotes={searchSalesNotes}
+        requestAddSaleCylinderLine={requestAddSaleCylinderLine}
       />
     ),
     "sales-export": <SalesMovementExportView />,
@@ -921,7 +1026,19 @@ function App() {
     cylinders: <CylindersView forms={forms} setForms={setForms} createCylinder={createCylinder} updateCylinder={updateCylinder} cylinders={state.cylinders} editCylinder={editCylinder} closeCylinderEditor={closeCylinderEditor} cylinderEditorClosing={cylinderEditorClosing} deleteCylinder={deleteCylinder} />,
     products: <ProductsView forms={forms} setForms={setForms} createProduct={createProduct} products={state.products} editProduct={editProduct} deleteProduct={deleteProduct} />,
     profiles: <ProfilesView forms={forms} setForms={setForms} createProfile={createProfile} updateProfile={updateProfile} profiles={state.profiles} loadProfiles={loadProfiles} editProfile={editProfile} closeProfileEditor={closeProfileEditor} profileEditorClosing={profileEditorClosing} deleteProfile={deleteProfile} />,
-    printing: <PrintingView salesNotes={state.salesNotes} selectedPrintNoteId={selectedPrintNoteId} setSelectedPrintNoteId={setSelectedPrintNoteId} printSaleNote={printSaleNote} />,
+    audit: <AuditView />,
+    printing: (
+      <PrintingView
+        salesNotes={printingNotes}
+        selectedPrintNoteId={selectedPrintNoteId}
+        setSelectedPrintNoteId={setSelectedPrintNoteId}
+        printSaleNote={printSaleNote}
+        filter={printingFilter}
+        setFilter={setPrintingFilter}
+        searchNotes={searchPrintingNotes}
+        loading={printingLoading}
+      />
+    ),
     profile: <ProfileView session={session} />
   }[pageKey];
 
@@ -1202,6 +1319,12 @@ function Dashboard({ metrics, inventory, movements, operationalAlerts, movementD
 
 function InventoryView({ filters, setFilters, searchInventory, inventory, cylinders = [] }) {
   const [selectedCylinder, setSelectedCylinder] = useState(null);
+  const activeFilter = exclusiveFilterKey(filters, ["locationType", "customerName", "serialNumber"]);
+  const activeFilterLabel = {
+    locationType: "Ubicación",
+    customerName: "Cliente",
+    serialNumber: "Serie"
+  }[activeFilter];
   const cylinderRegistry = useMemo(() => {
     const byId = new Map();
     const bySerial = new Map();
@@ -1224,22 +1347,44 @@ function InventoryView({ filters, setFilters, searchInventory, inventory, cylind
     <>
       <PageIntro eyebrow="INVENTARIO" title="Ubicación de cilindros" subtitle="Busca cilindros por planta, cliente o número de serie." />
       <Card title="Filtros de búsqueda">
+        <ExclusiveFilterNotice activeFilterLabel={activeFilterLabel} />
         <div className="formGrid four">
           <Field label="Ubicación">
-            <select value={filters.locationType} onChange={(event) => setFilters({ ...filters, locationType: event.target.value })}>
+            <select
+              value={filters.locationType}
+              onChange={(event) => setFilters({ ...filters, locationType: event.target.value })}
+              disabled={Boolean(activeFilter && activeFilter !== "locationType")}
+            >
               <option value="">Todas</option>
               <option value={MAIN_WAREHOUSE}>{MAIN_WAREHOUSE}</option>
               <option value="CLIENTE">CLIENTE</option>
             </select>
           </Field>
           <Field label="Cliente">
-            <input value={filters.customerName} onChange={(event) => setFilters({ ...filters, customerName: event.target.value })} placeholder="Nombre del cliente" />
+            <input
+              value={filters.customerName}
+              onChange={(event) => setFilters({ ...filters, customerName: event.target.value })}
+              placeholder="Nombre del cliente"
+              disabled={Boolean(activeFilter && activeFilter !== "customerName")}
+            />
           </Field>
           <Field label="Serie">
-            <input value={filters.serialNumber} onChange={(event) => setFilters({ ...filters, serialNumber: event.target.value })} placeholder="CYL-001" />
+            <input
+              value={filters.serialNumber}
+              onChange={(event) => setFilters({ ...filters, serialNumber: event.target.value })}
+              placeholder="CYL-001"
+              disabled={Boolean(activeFilter && activeFilter !== "serialNumber")}
+            />
           </Field>
           <div className="buttonField">
-            <button className="primaryBtn" onClick={() => searchInventory()}>Buscar</button>
+            <div className="dateFilterActions">
+              <button className="primaryBtn" onClick={() => searchInventory()} disabled={!activeFilter}>Buscar</button>
+              <button type="button" className="secondaryBtn" onClick={() => {
+                const emptyFilters = { locationType: "", customerName: "", serialNumber: "" };
+                setFilters(emptyFilters);
+                searchInventory(emptyFilters);
+              }} disabled={!activeFilter}>Limpiar</button>
+            </div>
           </div>
         </div>
       </Card>
@@ -1423,12 +1568,18 @@ function ClientsView({ customers = [], initialInventory = [] }) {
   );
 }
 
-function SalesView({ mode = "create", forms, setForms, createSale, cylinders, products, customers = [], inventory = [], salesNotes, editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes }) {
+function SalesView({ mode = "create", forms, setForms, createSale, cylinders, products, customers = [], inventory = [], salesNotes, editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes, requestAddSaleCylinderLine }) {
   const form = forms.sale;
   const [detailNote, setDetailNote] = useState(null);
   const activeCylinders = cylinders.filter((item) => item.active !== false);
   const activeProducts = products.filter((item) => item.active !== false);
   const showingCreation = mode === "create";
+  const activeSalesFilter = exclusiveFilterKey(salesDateFilter, ["dateFilterType", "noteNumber", "customerName"]);
+  const activeSalesFilterLabel = {
+    dateFilterType: "Fecha",
+    noteNumber: "Número de nota",
+    customerName: "Cliente"
+  }[activeSalesFilter];
   const customerNameSuggestions = useMemo(
     () => customers.map((customer) => uppercaseCustomerName(customer.name)).sort((left, right) => left.localeCompare(right, "es-BO")),
     [customers]
@@ -1534,7 +1685,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
               <div className="notice">Editando datos generales. Para corregir cilindros, anula la nota y registra una nueva.</div>
             ) : (
               <>
-                <LineSection title="Cilindros entregados" icon={ArrowUpFromLine} lines={form.deliveredCylinders} onAdd={() => addSaleLine(setForms, "deliveredCylinders", emptyDeliveredLine)}>
+                <LineSection title="Cilindros entregados" icon={ArrowUpFromLine} lines={form.deliveredCylinders} onAdd={() => requestAddSaleCylinderLine("deliveredCylinders", emptyDeliveredLine)}>
                   {(line, index) => {
                     const selected = findCylinderByNumber(activeCylinders, line.cylinderNumber);
                     const started = saleLineHasAnyValue(line);
@@ -1581,7 +1732,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                     );
                   }}
                 </LineSection>
-                <LineSection title="Cilindros recogidos" icon={ArrowDownToLine} lines={form.collectedCylinders} onAdd={() => addSaleLine(setForms, "collectedCylinders", emptyCollectedLine)}>
+                <LineSection title="Cilindros recogidos" icon={ArrowDownToLine} lines={form.collectedCylinders} onAdd={() => requestAddSaleCylinderLine("collectedCylinders", emptyCollectedLine)}>
                   {(line, index) => {
                     const selected = findCylinderByNumber(activeCylinders, line.cylinderNumber);
                     const started = saleLineHasAnyValue(line);
@@ -1638,32 +1789,44 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
       )}
       {!showingCreation && (
       <Card title="Notas registradas">
+        <ExclusiveFilterNotice activeFilterLabel={activeSalesFilterLabel} />
         <DatePeriodFilter
           value={salesDateFilter}
           onChange={setSalesDateFilter}
           onApply={searchSalesNotes}
           onClear={searchSalesNotes}
+          applyLabel="Buscar"
+          applyDisabled={!activeSalesFilter}
+          periodDisabled={Boolean(activeSalesFilter && activeSalesFilter !== "dateFilterType")}
           clearValueFactory={createSalesNoteFilter}
           className="salesNotesFilter"
         >
           <Field label="Número de nota">
             <input
               value={salesDateFilter.noteNumber}
-              onChange={(event) => setSalesDateFilter({ ...salesDateFilter, noteNumber: event.target.value.toUpperCase() })}
+              onChange={(event) => setSalesDateFilter({
+                ...salesDateFilter,
+                noteNumber: event.target.value.toUpperCase()
+              })}
               onKeyDown={(event) => {
                 if (event.key === "Enter") searchSalesNotes(salesDateFilter);
               }}
               placeholder="NV-000123"
+              disabled={Boolean(activeSalesFilter && activeSalesFilter !== "noteNumber")}
             />
           </Field>
           <Field label="Cliente">
             <input
               value={salesDateFilter.customerName}
-              onChange={(event) => setSalesDateFilter({ ...salesDateFilter, customerName: uppercaseCustomerName(event.target.value) })}
+              onChange={(event) => setSalesDateFilter({
+                ...salesDateFilter,
+                customerName: uppercaseCustomerName(event.target.value)
+              })}
               onKeyDown={(event) => {
                 if (event.key === "Enter") searchSalesNotes(salesDateFilter);
               }}
               placeholder="Nombre del cliente"
+              disabled={Boolean(activeSalesFilter && activeSalesFilter !== "customerName")}
             />
           </Field>
         </DatePeriodFilter>
@@ -1682,7 +1845,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
               <IconButton title="Anular nota" onClick={() => cancelSale(note)} icon={Trash2} disabled={note.status === "CANCELLED"} />
             </div>
           ])}
-          empty="Sin notas registradas"
+          empty={activeSalesFilter ? "No se encontraron notas con el filtro indicado" : "Selecciona un filtro para buscar notas registradas"}
           onRowClick={(index) => setDetailNote(salesNotes[index])}
         />
       </Card>
@@ -1824,16 +1987,221 @@ function SalesMovementExportView() {
   );
 }
 
-function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId, printSaleNote }) {
-  const selectedNote = salesNotes.find((note) => String(note.id) === String(selectedPrintNoteId));
+function AuditView() {
+  const [result, setResult] = useState({ content: [], page: 0, size: 50, totalElements: 0, totalPages: 0 });
+  const [selectedLog, setSelectedLog] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadPage(page = 0) {
+    setLoading(true);
+    setError("");
+    try {
+      const nextResult = await api(`/api/audit-logs?page=${Math.max(page, 0)}&size=50`);
+      setResult(nextResult);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadPage(0);
+  }, []);
+
+  const logs = result.content || [];
+  const actorsOnPage = new Set(logs.map((log) => log.actorUsername || "SISTEMA")).size;
+
   return (
     <>
-      <PageIntro eyebrow="IMPRESIÓN" title="Impresión" subtitle="Selecciona una nota de venta registrada para imprimirla." />
+      <PageIntro
+        eyebrow="CONTROL ADMINISTRATIVO"
+        title="Auditoría"
+        subtitle="Consulta quién registró, modificó, anuló o desactivó información en el sistema."
+      />
+      <div className="metricGrid auditMetrics">
+        <Metric label="Eventos registrados" value={result.totalElements || 0} icon={History} />
+        <Metric label="Usuarios en esta página" value={actorsOnPage} icon={Users} />
+        <Metric label="Página actual" value={result.totalPages ? `${result.page + 1} / ${result.totalPages}` : "0 / 0"} icon={ClipboardList} />
+      </div>
+      <Card title="Historial de cambios">
+        <div className="auditToolbar">
+          <div>
+            <strong>Trazabilidad protegida</strong>
+            <span>Disponible exclusivamente para perfiles con rol Administrador.</span>
+          </div>
+          <button type="button" className="secondaryBtn iconTextBtn" onClick={() => loadPage(result.page)} disabled={loading}>
+            <RefreshCw size={16} className={loading ? "spinIcon" : ""} /> Actualizar
+          </button>
+        </div>
+        {error && <div className="notice dangerNotice">{error}</div>}
+        {loading && !logs.length ? (
+          <Skeleton />
+        ) : (
+          logs.length ? (
+            <div className="auditEventList">
+              {logs.map((log) => {
+                const eventDate = formatAuditDateParts(log.createdAt);
+                return (
+                  <article
+                    className="auditEventCard"
+                    key={log.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedLog(log)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedLog(log);
+                      }
+                    }}
+                  >
+                    <div className="auditEventDate">
+                      <History size={18} />
+                      <strong>{eventDate.date}</strong>
+                      <span>{eventDate.time}</span>
+                    </div>
+                    <div className="auditEventBody">
+                      <div className="auditEventHeading">
+                        <div className="auditActor">
+                          <UserRound size={17} />
+                          <span>Realizado por</span>
+                          <strong>{log.actorUsername || "SISTEMA"}</strong>
+                        </div>
+                        <span className={`auditActionBadge ${String(log.action || "").toLowerCase()}`}>{auditActionLabel(log.action)}</span>
+                      </div>
+                      <strong className="auditEventSummary">{auditEventSummary(log)}</strong>
+                      <div className="auditEventMeta">
+                        <span><b>Módulo:</b> {auditEntityLabel(log.entityType)}</span>
+                        <span><b>Registro:</b> #{log.entityId}</span>
+                        <span><b>Origen:</b> {auditSourceLabel(log.sourceType)}</span>
+                      </div>
+                    </div>
+                    <button type="button" className="auditOpenButton" onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedLog(log);
+                    }}>
+                      Ver detalle <Eye size={16} />
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState title="Sin eventos" text="Todavía no hay eventos de auditoría registrados" />
+          )
+        )}
+        <div className="auditPagination">
+          <button type="button" className="secondaryBtn" onClick={() => loadPage(result.page - 1)} disabled={loading || result.page <= 0}>Anterior</button>
+          <span>{result.totalPages ? `Página ${result.page + 1} de ${result.totalPages}` : "Sin páginas"}</span>
+          <button type="button" className="secondaryBtn" onClick={() => loadPage(result.page + 1)} disabled={loading || result.page + 1 >= result.totalPages}>Siguiente</button>
+        </div>
+      </Card>
+      {selectedLog && (
+        <DetailModal
+          eyebrow="EVENTO DE AUDITORÍA"
+          title={`${auditActionLabel(selectedLog.action)} · ${auditEntityLabel(selectedLog.entityType)}`}
+          onClose={() => setSelectedLog(null)}
+        >
+          <div className="detailGrid compact auditDetailMeta">
+            <div><span>Usuario</span><strong>{selectedLog.actorUsername || "SISTEMA"}</strong></div>
+            <div><span>Fecha y hora</span><strong>{formatAuditDateTime(selectedLog.createdAt)}</strong></div>
+            <div><span>Registro</span><strong>{selectedLog.entityId}</strong></div>
+            <div><span>Origen</span><strong>{auditSourceLabel(selectedLog.sourceType)}</strong></div>
+            <div><span>Solicitud</span><strong>{[selectedLog.requestMethod, selectedLog.requestPath].filter(Boolean).join(" ") || "-"}</strong></div>
+            <div><span>Dirección IP</span><strong>{selectedLog.ipAddress || "-"}</strong></div>
+          </div>
+          <AuditChanges log={selectedLog} />
+        </DetailModal>
+      )}
+    </>
+  );
+}
+
+function AuditChanges({ log }) {
+  const rows = auditChangeRows(log);
+  return (
+    <div className="auditChanges">
+      <h4>Cambios registrados</h4>
+      {rows.length ? (
+        <div className="auditChangeList">
+          {rows.map((row) => (
+            <section className="auditChangeItem" key={row.field}>
+              <strong className="auditChangeField">{auditFieldLabel(row.field)}</strong>
+              <div className="auditChangeComparison">
+                <div className="auditBeforeValue">
+                  <span>Antes</span>
+                  <code className="auditValue">{auditValueText(row.previous)}</code>
+                </div>
+                <div className="auditAfterValue">
+                  <span>Después</span>
+                  <code className="auditValue">{auditValueText(row.next)}</code>
+                </div>
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="Sin diferencias" text="El evento no contiene valores comparables" />
+      )}
+    </div>
+  );
+}
+
+function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId, printSaleNote, filter, setFilter, searchNotes, loading }) {
+  const selectedNote = salesNotes.find((note) => String(note.id) === String(selectedPrintNoteId));
+  const activeFilter = exclusiveFilterKey(filter, ["date", "noteNumber"]);
+  const activeFilterLabel = { date: "Fecha", noteNumber: "Número de nota" }[activeFilter];
+
+  function submitSearch(event) {
+    event.preventDefault();
+    searchNotes(filter);
+  }
+
+  function clearSearch() {
+    const nextFilter = createPrintingNoteFilter(false);
+    setFilter(nextFilter);
+    searchNotes(nextFilter);
+  }
+
+  return (
+    <>
+      <PageIntro eyebrow="IMPRESIÓN" title="Impresión" subtitle="Busca cualquier nota de venta utilizando un solo filtro a la vez." />
       <Card title="Notas disponibles">
+        <ExclusiveFilterNotice activeFilterLabel={activeFilterLabel} />
+        <form className="printingSearch" onSubmit={submitSearch}>
+          <Field label="Fecha de la nota">
+            <input
+              type="date"
+              value={filter.date}
+              onChange={(event) => setFilter({ ...filter, date: event.target.value })}
+              disabled={Boolean(activeFilter && activeFilter !== "date")}
+            />
+          </Field>
+          <Field label="Número de nota">
+            <input
+              value={filter.noteNumber}
+              onChange={(event) => setFilter({ ...filter, noteNumber: event.target.value.toUpperCase() })}
+              placeholder="NV-000123"
+              disabled={Boolean(activeFilter && activeFilter !== "noteNumber")}
+            />
+          </Field>
+          <div className="dateFilterActions">
+            <button type="submit" className="primaryBtn iconTextBtn" disabled={loading || !activeFilter}>
+              {loading ? <><LoaderCircle className="spinIcon" size={16} /> Buscando...</> : "Buscar"}
+            </button>
+            <button type="button" className="secondaryBtn" onClick={clearSearch} disabled={loading}>Limpiar</button>
+          </div>
+        </form>
         <div className="printingToolbar">
           <div>
             <span>Nota seleccionada</span>
             <strong>{selectedNote ? `${selectedNote.noteNumber} - ${selectedNote.customerName}` : "Ninguna"}</strong>
+          </div>
+          <div className="printingResultCount">
+            <span>Resultados</span>
+            <strong>{salesNotes.length}</strong>
           </div>
           <button
             type="button"
@@ -1862,7 +2230,9 @@ function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId,
             money(note.totalAmount),
             note.status === "CANCELLED" ? <span className="dangerBadge">ANULADA</span> : "REGISTERED"
           ])}
-          empty="Sin notas registradas para imprimir"
+          empty={loading
+            ? "Buscando notas de venta..."
+            : activeFilter ? "No se encontraron notas con el filtro indicado" : "Selecciona un filtro para buscar notas de venta"}
         />
       </Card>
     </>
@@ -1936,7 +2306,7 @@ function PreviewSection({ title, columns, rows, empty }) {
   );
 }
 
-function DatePeriodFilter({ value, onChange, onApply, onClear, applyLabel = "Aplicar", applyDisabled = false, clearValueFactory = createDateFilter, className = "", children = null }) {
+function DatePeriodFilter({ value, onChange, onApply, onClear, applyLabel = "Aplicar", applyDisabled = false, periodDisabled = false, clearValueFactory = createDateFilter, className = "", children = null }) {
   function update(field, fieldValue) {
     onChange({ ...value, [field]: fieldValue });
   }
@@ -1950,7 +2320,7 @@ function DatePeriodFilter({ value, onChange, onApply, onClear, applyLabel = "Apl
   return (
     <div className={`dateFilter${className ? ` ${className}` : ""}`}>
       <Field label="Tipo de fecha">
-        <select value={value.dateFilterType} onChange={(event) => update("dateFilterType", event.target.value)}>
+        <select value={value.dateFilterType} onChange={(event) => update("dateFilterType", event.target.value)} disabled={periodDisabled}>
           <option value="">Sin filtro</option>
           <option value="DAY">Día</option>
           <option value="MONTH">Mes</option>
@@ -1959,24 +2329,24 @@ function DatePeriodFilter({ value, onChange, onApply, onClear, applyLabel = "Apl
       </Field>
       {value.dateFilterType === "DAY" && (
         <Field label="Fecha">
-          <input type="date" value={value.date} onChange={(event) => update("date", event.target.value)} />
+          <input type="date" value={value.date} onChange={(event) => update("date", event.target.value)} disabled={periodDisabled} />
         </Field>
       )}
       {value.dateFilterType === "MONTH" && (
         <>
           <Field label="Mes">
-            <select value={value.month} onChange={(event) => update("month", Number(event.target.value))}>
+            <select value={value.month} onChange={(event) => update("month", Number(event.target.value))} disabled={periodDisabled}>
               {monthOptions.map((month) => <option key={month.value} value={month.value}>{month.label}</option>)}
             </select>
           </Field>
           <Field label="Año">
-            <input type="number" min="2000" max="2100" value={value.year} onChange={(event) => update("year", Number(event.target.value))} />
+            <input type="number" min="2000" max="2100" value={value.year} onChange={(event) => update("year", Number(event.target.value))} disabled={periodDisabled} />
           </Field>
         </>
       )}
       {value.dateFilterType === "YEAR" && (
         <Field label="Año">
-          <input type="number" min="2000" max="2100" value={value.year} onChange={(event) => update("year", Number(event.target.value))} />
+          <input type="number" min="2000" max="2100" value={value.year} onChange={(event) => update("year", Number(event.target.value))} disabled={periodDisabled} />
         </Field>
       )}
       {children}
@@ -2270,6 +2640,19 @@ function Field({ label, children, className = "" }) {
   );
 }
 
+function ExclusiveFilterNotice({ activeFilterLabel }) {
+  return (
+    <div className="notice exclusiveFilterNotice" role="note">
+      <strong>Solo se permite un filtro a la vez.</strong>
+      <span>
+        {activeFilterLabel
+          ? ` Filtro activo: ${activeFilterLabel}. Vacíalo o pulsa Limpiar para habilitar los demás.`
+          : " Al comenzar a completar uno, los demás quedarán bloqueados."}
+      </span>
+    </div>
+  );
+}
+
 function AutocompleteInput({ value, suggestion, onChange, onSuggestionAccept, placeholder, required = false, list }) {
   const handleKeyDown = (event) => {
     if (!suggestion || !onSuggestionAccept) return;
@@ -2316,7 +2699,7 @@ function LineSection({ title, icon: Icon, lines, onAdd, children }) {
     <div className="lineSection">
       <div className="lineSectionHead">
         <PanelTitle icon={Icon} title={title} />
-        <button type="button" className="addLineBtn iconTextBtn" onClick={onAdd}><Plus size={16} /> Agregar</button>
+        <button type="button" className="addLineBtn iconTextBtn" onClick={onAdd}><Plus size={16} /> Añadir</button>
       </div>
       <div className="lineList">
         {visibleLines.map((line, index) => children(line, index))}
@@ -2338,6 +2721,7 @@ function IconButton({ title, onClick, icon: Icon, disabled = false }) {
 
 function MissingCylinderDialog({ dialog, onConfirm, onReject, onClose }) {
   const count = dialog.cylinders?.length || 0;
+  const isLineAdd = dialog.action === "add-line";
   const isConfirming = dialog.status === "confirm";
   const isProcessing = dialog.status === "processing";
   const isSuccess = dialog.status === "success";
@@ -2359,7 +2743,9 @@ function MissingCylinderDialog({ dialog, onConfirm, onReject, onClose }) {
               </div>
             </div>
             <p className="missingCylinderQuestion">
-              {count === 1
+              {isLineAdd
+                ? "Este cilindro no existe en la base de datos. ¿Deseas agregarlo al módulo de Cilindros?"
+                : count === 1
                 ? "Este cilindro no existe en la base de datos actual. ¿Quieres agregarlo antes de crear la nota de venta?"
                 : `Estos ${count} cilindros no existen en la base de datos actual. ¿Quieres agregarlos antes de crear la nota de venta?`}
             </p>
@@ -2380,10 +2766,12 @@ function MissingCylinderDialog({ dialog, onConfirm, onReject, onClose }) {
             </div>
             <div className="missingCylinderActions">
               <button type="button" className="primaryBtn" onClick={onConfirm} disabled={isProcessing}>
-                {isProcessing ? <><LoaderCircle className="spinIcon" size={17} /> Registrando...</> : "Sí, agregar y crear nota"}
+                {isProcessing
+                  ? <><LoaderCircle className="spinIcon" size={17} /> Registrando...</>
+                  : isLineAdd ? "Sí, registrar cilindro" : "Sí, agregar y crear nota"}
               </button>
               <button type="button" className="secondaryBtn dangerSecondaryBtn" onClick={onReject} disabled={isProcessing}>
-                No, cancelar
+                {isLineAdd ? "No, no añadir" : "No, cancelar"}
               </button>
             </div>
           </>
@@ -2394,7 +2782,9 @@ function MissingCylinderDialog({ dialog, onConfirm, onReject, onClose }) {
             <h3 id="missing-cylinder-title">{count === 1 ? "¡Cilindro registrado!" : "¡Cilindros registrados!"}</h3>
             <p>
               {count === 1
-                ? "El cilindro fue agregado a la base de datos y la nota de venta se creó correctamente."
+                ? isLineAdd
+                  ? "El cilindro fue agregado al módulo de Cilindros y quedará disponible para las siguientes notas de venta."
+                  : "El cilindro fue agregado a la base de datos y la nota de venta se creó correctamente."
                 : `Los ${count} cilindros fueron agregados a la base de datos y la nota de venta se creó correctamente.`}
             </p>
           </div>
@@ -2405,7 +2795,9 @@ function MissingCylinderDialog({ dialog, onConfirm, onReject, onClose }) {
             <h3 id="missing-cylinder-title">{isRejected ? "Cilindro no agregado" : "No se pudo completar la operación"}</h3>
             <p>
               {isRejected
-                ? "No se agregó el cilindro y la nota de venta no fue creada. Corrige o elimina la línea para continuar."
+                ? isLineAdd
+                  ? "No se agregó el cilindro ni se añadió una nueva línea. Corrige o elimina la línea para continuar."
+                  : "No se agregó el cilindro y la nota de venta no fue creada. Corrige o elimina la línea para continuar."
                 : dialog.error}
             </p>
             {isError && <button type="button" className="secondaryBtn" onClick={onClose}>Volver a la nota</button>}
@@ -2621,6 +3013,17 @@ function createSalesNoteFilter(dateFilterType = "") {
   };
 }
 
+function createPrintingNoteFilter(useToday = true) {
+  return {
+    date: useToday ? todayDate() : "",
+    noteNumber: ""
+  };
+}
+
+function exclusiveFilterKey(filter, keys) {
+  return keys.find((key) => String(filter?.[key] ?? "").trim() !== "") || "";
+}
+
 function buildDateQuery(filter) {
   if (!filter?.dateFilterType) return "";
   const params = new URLSearchParams();
@@ -2639,11 +3042,27 @@ function buildDateQuery(filter) {
 }
 
 function buildSalesNoteQuery(filter) {
-  const params = new URLSearchParams(buildDateQuery(filter).replace(/^\?/, ""));
+  const activeFilter = exclusiveFilterKey(filter, ["dateFilterType", "noteNumber", "customerName"]);
+  if (activeFilter === "dateFilterType") return buildDateQuery(filter);
+
+  const params = new URLSearchParams();
   const noteNumber = String(filter?.noteNumber || "").trim();
   const customerName = String(filter?.customerName || "").trim();
-  if (noteNumber) params.set("noteNumber", noteNumber);
-  if (customerName) params.set("customerName", customerName);
+  if (activeFilter === "noteNumber" && noteNumber) params.set("noteNumber", noteNumber);
+  if (activeFilter === "customerName" && customerName) params.set("customerName", customerName);
+  return params.toString() ? `?${params.toString()}` : "";
+}
+
+function buildPrintingNoteQuery(filter) {
+  const params = new URLSearchParams();
+  const activeFilter = exclusiveFilterKey(filter, ["date", "noteNumber"]);
+  const date = String(filter?.date || "").trim();
+  const noteNumber = String(filter?.noteNumber || "").trim();
+  if (activeFilter === "date" && date) {
+    params.set("dateFilterType", "DAY");
+    params.set("date", date);
+  }
+  if (activeFilter === "noteNumber" && noteNumber) params.set("noteNumber", noteNumber);
   return params.toString() ? `?${params.toString()}` : "";
 }
 
@@ -2703,6 +3122,10 @@ function findCylinderByNumber(items, number) {
 
 function saleCylinderOwnerName(cylinder) {
   return uppercaseCustomerName(cylinder?.owner || "");
+}
+
+function isCompanyCylinderOwner(ownerName) {
+  return uppercaseCustomerName(ownerName).trim().startsWith(BRAND_OWNER_NAME);
 }
 
 function findOwnerNameSuggestion(suggestions, value) {
@@ -2811,7 +3234,7 @@ async function printSaleNote(note) {
   printWindow.document.close();
 
   try {
-    const completeNote = note?.id ? await api(`/api/sales-notes/${note.id}`) : note;
+    const completeNote = note?.id ? await api(`/api/sales-notes/${note.id}?usage=PRINT`) : note;
     const pdfBytes = await buildSaleNotePdf(completeNote);
     const pdfUrl = URL.createObjectURL(new Blob([pdfBytes], { type: "application/pdf" }));
     printWindow.location.href = pdfUrl;
@@ -3155,6 +3578,163 @@ function localDateTimeInputValue() {
 function formatDateTime(value) {
   if (!value) return "-";
   return value.replace("T", " ").slice(0, 16);
+}
+
+function formatAuditDateTime(value) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("es-BO", {
+    dateStyle: "medium",
+    timeStyle: "medium",
+    timeZone: "America/La_Paz"
+  }).format(new Date(value));
+}
+
+function formatAuditDateParts(value) {
+  if (!value) return { date: "Sin fecha", time: "-" };
+  const date = new Date(value);
+  return {
+    date: new Intl.DateTimeFormat("es-BO", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: "America/La_Paz"
+    }).format(date),
+    time: new Intl.DateTimeFormat("es-BO", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZone: "America/La_Paz"
+    }).format(date)
+  };
+}
+
+function auditEventSummary(log) {
+  const entity = auditEntityLabel(log?.entityType).toLowerCase();
+  const action = {
+    LOGIN: "Inició sesión en el sistema",
+    LOGIN_FAILED: "Intentó iniciar sesión sin éxito",
+    LOGOUT: "Cerró su sesión",
+    VIEW: `Consultó ${entity}`,
+    SEARCH: `Realizó una búsqueda en ${entity}`,
+    PRINT: `Imprimió ${entity}`,
+    EXPORT: `Exportó información de ${entity}`,
+    ACCESS_DENIED: `Intentó acceder sin permiso a ${entity}`,
+    OPERATION_FAILED: `Intentó una operación que no pudo completarse en ${entity}`,
+    CREATE: `Registró un nuevo ${entity}`,
+    UPDATE: `Modificó un ${entity}`,
+    DELETE: `Eliminó un ${entity}`,
+    DEACTIVATE: `Desactivó un ${entity}`,
+    MERGE: `Unificó registros de ${entity}`,
+    CANCEL: `Anuló un ${entity}`,
+    IMPORT: `Importó registros de ${entity}`
+  }[log?.action];
+  return action || `Realizó una operación sobre ${entity}`;
+}
+
+function auditActionLabel(action) {
+  return {
+    LOGIN: "Inicio de sesión",
+    LOGIN_FAILED: "Acceso rechazado",
+    LOGOUT: "Cierre de sesión",
+    VIEW: "Consulta",
+    SEARCH: "Búsqueda",
+    PRINT: "Impresión",
+    EXPORT: "Exportación",
+    ACCESS_DENIED: "Acceso denegado",
+    OPERATION_FAILED: "Operación fallida",
+    CREATE: "Creación",
+    UPDATE: "Modificación",
+    DELETE: "Eliminación",
+    DEACTIVATE: "Desactivación",
+    MERGE: "Unificación",
+    CANCEL: "Anulación",
+    IMPORT: "Importación"
+  }[action] || action || "Evento";
+}
+
+function auditEntityLabel(entityType) {
+  return {
+    SESSION: "Sesión",
+    AUDIT_LOG: "Auditoría",
+    INVENTORY: "Inventario",
+    UTILITY: "Utilidades",
+    OPERATIONAL_ALERT: "Alerta operativa",
+    SECURITY: "Seguridad",
+    SALES_NOTE: "Nota de venta",
+    CYLINDER: "Cilindro",
+    PRODUCT: "Producto",
+    CUSTOMER: "Cliente",
+    USER_PROFILE: "Perfil de usuario",
+    WAREHOUSE: "Almacén",
+    INVENTORY_MOVEMENT: "Movimiento de inventario"
+  }[entityType] || String(entityType || "Registro").replaceAll("_", " ");
+}
+
+function auditSourceLabel(sourceType) {
+  return { USER: "USUARIO", SYSTEM: "SISTEMA", IMPORT: "IMPORTACIÓN" }[sourceType] || sourceType || "SISTEMA";
+}
+
+function auditChangeRows(log) {
+  const previous = parseAuditData(log?.previousData);
+  const next = parseAuditData(log?.newData);
+  const fields = Array.from(new Set([...Object.keys(previous), ...Object.keys(next)]));
+  return fields
+    .filter((field) => JSON.stringify(previous[field]) !== JSON.stringify(next[field]))
+    .map((field) => ({ field, previous: previous[field], next: next[field] }));
+}
+
+function parseAuditData(value) {
+  if (value == null || value === "") return {};
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    return { detail: parsed };
+  } catch {
+    return { detail: value };
+  }
+}
+
+function auditFieldLabel(field) {
+  const labels = {
+    id: "Identificador",
+    noteNumber: "Número de nota",
+    customerName: "Cliente",
+    noteDate: "Fecha de la nota",
+    observations: "Observaciones",
+    utilityAmount: "Utilidad",
+    totalAmount: "Importe total",
+    status: "Estado",
+    sourceType: "Origen",
+    serialNumber: "Número de cilindro",
+    capacityM3: "Capacidad (m3)",
+    owner: "Propietario",
+    ownerType: "Tipo de propietario",
+    currentLocationType: "Ubicación actual",
+    currentCustomerName: "Cliente actual",
+    code: "Código",
+    name: "Nombre",
+    description: "Descripción",
+    fullName: "Nombre completo",
+    username: "Usuario",
+    roleName: "Rol",
+    active: "Activo",
+    deliveredCylinders: "Cilindros entregados",
+    collectedCylinders: "Cilindros recogidos",
+    movements: "Movimientos",
+    detail: "Detalle"
+  };
+  if (labels[field]) return labels[field];
+  return String(field)
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function auditValueText(value) {
+  if (value === undefined || value === null || value === "") return "-";
+  if (typeof value === "boolean") return value ? "Sí" : "No";
+  if (typeof value === "object") return JSON.stringify(value, null, 2);
+  return String(value);
 }
 
 function formatMovementType(value) {

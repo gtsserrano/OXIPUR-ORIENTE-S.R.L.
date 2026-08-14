@@ -1,16 +1,16 @@
 # Documentación del sistema OXIPUR
 
-Esta carpeta contiene la documentación oficial correspondiente a la versión 1.1.2,
-validada para su despliegue en producción el 13 de agosto de 2026.
+Esta carpeta contiene la documentación oficial correspondiente a la versión
+`1.1.4-snapshot`, validada como candidata de publicación el 14 de agosto de 2026.
 
 ## Documentos
 
 - `ficha_tecnica_sistema_oxipur.pdf`: arquitectura, infraestructura, seguridad,
-  persistencia, migración histórica, cambios de v1.1.2, respaldos y validaciones
-  técnicas.
+  persistencia, migración histórica, auditoría ampliada, cambios de
+  `1.1.4-snapshot`, respaldos y validaciones técnicas.
 - `guia_de_usuario_sistema_oxipur.pdf`: manual exhaustivo de todas las funciones
-  visibles, diferenciado por rol y actualizado con los filtros de notas y la
-  confirmación obligatoria para cilindros no registrados de v1.1.2.
+  visibles, diferenciado por rol y actualizado con filtros exclusivos,
+  búsqueda previa de impresión, auditoría detallada y alta guiada de cilindros.
 - `generate_v1_1_pdfs.py`: fuente reproducible que genera ambos PDF y sincroniza
   las copias de `output/pdf/` y `docs/manuales/`.
 

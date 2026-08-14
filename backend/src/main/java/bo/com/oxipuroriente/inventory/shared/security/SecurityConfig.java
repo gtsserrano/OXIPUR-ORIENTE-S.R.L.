@@ -21,6 +21,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 import bo.com.oxipuroriente.inventory.modules.iam.security.JwtAuthenticationFilter;
 import bo.com.oxipuroriente.inventory.modules.iam.security.JwtProperties;
+import bo.com.oxipuroriente.inventory.modules.auditoria.application.AuditRequestLoggingFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import tools.jackson.databind.ObjectMapper;
 
@@ -30,7 +31,10 @@ import tools.jackson.databind.ObjectMapper;
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter)
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            AuditRequestLoggingFilter auditRequestLoggingFilter)
             throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -59,6 +63,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").authenticated()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(auditRequestLoggingFilter, JwtAuthenticationFilter.class)
                 .build();
     }
 

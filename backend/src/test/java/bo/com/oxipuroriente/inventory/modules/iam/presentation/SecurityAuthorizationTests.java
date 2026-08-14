@@ -18,6 +18,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import bo.com.oxipuroriente.inventory.modules.auditoria.domain.AuditAction;
+import bo.com.oxipuroriente.inventory.modules.auditoria.infrastructure.AuditLogRepository;
 import bo.com.oxipuroriente.inventory.modules.iam.application.PasswordService;
 import bo.com.oxipuroriente.inventory.modules.iam.security.JwtTokenService;
 import bo.com.oxipuroriente.inventory.modules.perfiles.domain.UserProfile;
@@ -43,6 +45,9 @@ class SecurityAuthorizationTests {
 
     @Autowired
     private JwtTokenService jwtTokenService;
+
+    @Autowired
+    private AuditLogRepository auditLogRepository;
 
     @Test
     void rejectsRequestWithoutToken() throws Exception {
@@ -72,15 +77,25 @@ class SecurityAuthorizationTests {
 
     @Test
     void allowsAuthenticatedOperatorToReadCatalog() throws Exception {
-        String token = loginToken(createProfile("OPERADOR"));
+        UserProfile operator = createProfile("OPERADOR");
+        String token = loginToken(operator);
+        long auditCountBefore = auditLogRepository.count();
 
         mockMvc.perform(get("/api/products").header(HttpHeaders.AUTHORIZATION, bearer(token)))
                 .andExpect(status().isOk());
+
+        assertThat(auditLogRepository.count()).isEqualTo(auditCountBefore + 1);
+        assertThat(auditLogRepository.findAll()).anyMatch(log ->
+                log.getAction() == AuditAction.VIEW
+                        && "PRODUCT".equals(log.getEntityType())
+                        && operator.getId().equals(log.getActorUserId()));
     }
 
     @Test
     void deniesOperatorCatalogMutation() throws Exception {
-        String token = loginToken(createProfile("OPERADOR"));
+        UserProfile operator = createProfile("OPERADOR");
+        String token = loginToken(operator);
+        long auditCountBefore = auditLogRepository.count();
 
         mockMvc.perform(post("/api/products")
                         .header(HttpHeaders.AUTHORIZATION, bearer(token))
@@ -92,6 +107,12 @@ class SecurityAuthorizationTests {
                                 }
                                 """.formatted(unique("SEC-PROD"))))
                 .andExpect(status().isForbidden());
+
+        assertThat(auditLogRepository.count()).isEqualTo(auditCountBefore + 1);
+        assertThat(auditLogRepository.findAll()).anyMatch(log ->
+                log.getAction() == AuditAction.ACCESS_DENIED
+                        && "PRODUCT".equals(log.getEntityType())
+                        && operator.getId().equals(log.getActorUserId()));
     }
 
     @Test
