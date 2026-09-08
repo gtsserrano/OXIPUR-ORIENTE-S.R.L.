@@ -726,6 +726,27 @@ button {
   background: transparent;
 }
 
+.autocompleteInput.hasCheck input {
+  padding-left: 34px;
+}
+
+.autocompleteCheck {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: #1f9d4d;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 9px 9px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5 L6.8 11.3 L12 5.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
 .autocompleteGhost {
   position: absolute;
   inset: 0;
@@ -741,6 +762,10 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
   pointer-events: none;
+}
+
+.autocompleteInput.hasCheck .autocompleteGhost {
+  padding-left: 34px;
 }
 
 .autocompleteGhostPrefix {
@@ -762,6 +787,9 @@ button {
   z-index: 5;
   width: fit-content;
   max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid;
   border-radius: 7px;
   padding: 6px 9px;
@@ -781,12 +809,6 @@ button {
   border-color: #f0c766;
   background: #fff8db;
   color: #8a5b00;
-}
-
-.customerHintSuccess {
-  border-color: #8fd4a5;
-  background: #e9f9ee;
-  color: #176d36;
 }
 
 .buttonField {
@@ -859,6 +881,7 @@ button {
 
 .profileEditModal,
 .cylinderEditModal,
+.customerEditModal,
 .logoutConfirmModal,
 .missingCylinderModal {
   width: min(100%, 680px);
@@ -999,6 +1022,7 @@ button {
 
 .modalOverlay.closing .profileEditModal,
 .modalOverlay.closing .cylinderEditModal,
+.modalOverlay.closing .customerEditModal,
 .modalOverlay.closing .logoutConfirmModal,
 .modalOverlay.closing .detailModal {
   animation: modalPanelOut 180ms ease both;
@@ -1118,6 +1142,11 @@ button {
   gap: 12px;
 }
 
+.lineSectionFoot {
+  display: flex;
+  margin-top: 14px;
+}
+
 .lineGrid {
   display: grid;
   gap: 12px;
@@ -1224,6 +1253,80 @@ button {
 
 .salesComposer {
   display: block;
+}
+
+.saleTypePrompt {
+  display: grid;
+  gap: 18px;
+  padding: 12px 0 4px;
+}
+
+.saleTypePromptText {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.saleTypeOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.saleTypeOption {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fcfe;
+  padding: 20px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.saleTypeOption svg {
+  color: var(--accent-strong);
+}
+
+.saleTypeOption strong {
+  font-size: 16px;
+}
+
+.saleTypeOption span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.saleTypeOption:hover {
+  border-color: var(--accent);
+  background: #edf9fc;
+  box-shadow: 0 8px 18px rgba(7, 141, 177, 0.14);
+}
+
+.saleTypeBadge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f2f9fc;
+  padding: 10px 16px;
+  margin-bottom: 18px;
+}
+
+.saleTypeBadge span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.saleTypeBadge strong {
+  color: var(--ink);
 }
 
 .salePreview {
@@ -2113,6 +2216,10 @@ tr:last-child td {
 
 .clientListButton:last-child {
   border-bottom: 0;
+}
+
+.clientListButton.clientListButtonEditable {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
 }
 
 .clientListButton:hover,

@@ -130,10 +130,12 @@ const emptyForm = {
     ownerType: "COMPANY"
   },
   product: { id: null, code: "", name: "", description: "" },
+  customerEditor: { id: null, name: "", active: true },
   profile: { id: null, fullName: "", username: "", password: "", roleName: "OPERADOR", active: true },
   profileEditor: { id: null, fullName: "", username: "", password: "", roleName: "OPERADOR", active: true },
   sale: {
     id: null,
+    noteType: null,
     noteNumber: "",
     customerName: "",
     noteDate: localDateTimeInputValue(),
@@ -170,6 +172,7 @@ function App() {
   const [forms, setForms] = useState(emptyForm);
   const [profileEditorClosing, setProfileEditorClosing] = useState(false);
   const [cylinderEditorClosing, setCylinderEditorClosing] = useState(false);
+  const [customerEditorClosing, setCustomerEditorClosing] = useState(false);
   const [salesDateFilter, setSalesDateFilter] = useState(createSalesNoteFilter());
   const [movementDateFilter, setMovementDateFilter] = useState(createDateFilter("MONTH"));
   const [utilityDateFilter, setUtilityDateFilter] = useState(createDateFilter("MONTH"));
@@ -185,7 +188,7 @@ function App() {
     try {
       const canManageProfiles = hasPermission(session, PERMISSIONS.MANAGE_PROFILES);
       const canViewUtilities = hasPermission(session, PERMISSIONS.VIEW_UTILITIES);
-      const hasSalesNoteFilter = exclusiveFilterKey(salesDateFilter, ["dateFilterType", "noteNumber", "customerName"]);
+      const hasSalesNoteFilter = salesNoteFilterIsActive(salesDateFilter);
       const salesDateQuery = buildSalesNoteQuery(salesDateFilter);
       const movementDateQuery = buildDateQuery(movementDateFilter);
       const utilityDateQuery = buildDateQuery(utilityDateFilter);
@@ -477,6 +480,45 @@ function App() {
     });
   }
 
+  function editCustomer(customer) {
+    if (!customer.id) return;
+    setCustomerEditorClosing(false);
+    setForms((value) => ({
+      ...value,
+      customerEditor: {
+        id: customer.id,
+        name: customer.name,
+        active: customer.active !== false
+      }
+    }));
+  }
+
+  function closeCustomerEditor() {
+    if (!forms.customerEditor.id || customerEditorClosing) return;
+    setCustomerEditorClosing(true);
+    window.setTimeout(() => {
+      setForms((value) => ({ ...value, customerEditor: { ...emptyForm.customerEditor } }));
+      setCustomerEditorClosing(false);
+    }, CYLINDER_EDITOR_CLOSE_MS);
+  }
+
+  async function updateCustomer(event) {
+    event.preventDefault();
+    const form = forms.customerEditor;
+    await runAction(async () => {
+      await api(`/api/customers/${form.id}`, {
+        method: "PATCH",
+        body: {
+          name: uppercaseCustomerName(form.name),
+          active: form.active !== false
+        }
+      });
+      await loadAll();
+      notify("Cliente actualizado correctamente.");
+      closeCustomerEditor();
+    });
+  }
+
   async function createProduct(event) {
     event.preventDefault();
     const form = forms.product;
@@ -651,8 +693,13 @@ function App() {
       return;
     }
 
-    const deliveredLines = (form.deliveredCylinders || []).filter(saleLineHasAnyValue);
-    const collectedLines = (form.collectedCylinders || []).filter(saleLineHasAnyValue);
+    if (!form.noteType) {
+      notify("Selecciona el tipo de nota antes de continuar.");
+      return;
+    }
+
+    const deliveredLines = form.noteType === "RECEPCION" ? [] : (form.deliveredCylinders || []).filter(saleLineHasAnyValue);
+    const collectedLines = form.noteType === "ENTREGA" ? [] : (form.collectedCylinders || []).filter(saleLineHasAnyValue);
     const missingCylinder = [...deliveredLines, ...collectedLines].some((line) => !line.cylinderNumber);
     if (missingCylinder) {
       notify("Completa el número de cilindro en cada línea usada.");
@@ -973,7 +1020,18 @@ function App() {
         cylinders={state.cylinders}
       />
     ),
-    clients: <ClientsView customers={state.customers} initialInventory={state.inventory} />,
+    clients: (
+      <ClientsView
+        customers={state.customers}
+        initialInventory={state.inventory}
+        forms={forms}
+        setForms={setForms}
+        editCustomer={editCustomer}
+        closeCustomerEditor={closeCustomerEditor}
+        customerEditorClosing={customerEditorClosing}
+        updateCustomer={updateCustomer}
+      />
+    ),
     "sales-create": (
       <SalesView
         mode="create"
@@ -1440,7 +1498,8 @@ function InventoryView({ filters, setFilters, searchInventory, inventory, cylind
   );
 }
 
-function ClientsView({ customers = [], initialInventory = [] }) {
+function ClientsView({ customers = [], initialInventory = [], forms, setForms, editCustomer, closeCustomerEditor, customerEditorClosing, updateCustomer }) {
+  const editor = forms.customerEditor;
   const [inventory, setInventory] = useState(initialInventory);
   const [detailClient, setDetailClient] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1527,19 +1586,32 @@ function ClientsView({ customers = [], initialInventory = [] }) {
               </div>
               <div className="clientList">
                 {clients.map((client) => (
-                  <button
-                    type="button"
+                  <div
                     key={client.name}
-                    className="clientListButton"
+                    className="clientListButton clientListButtonEditable"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setDetailClient(client)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setDetailClient(client);
+                      }
+                    }}
                   >
                     <span>
                       <strong>{client.name}</strong>
                       <em>{formatCapacity(client.totalCapacity)} m3</em>
                     </span>
                     <b>{client.cylinders.length}</b>
+                    <IconButton
+                      title={client.id ? "Editar cliente" : "Este cliente aún no está registrado en el catálogo"}
+                      onClick={() => editCustomer(client)}
+                      icon={Edit3}
+                      disabled={!client.id}
+                    />
                     <span className="clientOpenIcon" aria-hidden="true"><Eye size={16} /></span>
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -1564,6 +1636,36 @@ function ClientsView({ customers = [], initialInventory = [] }) {
           <EmptyState title="Sin clientes registrados" text="No hay clientes disponibles en la base de datos." />
         )}
       </Card>
+      {editor.id && (
+        <div className={`modalOverlay ${customerEditorClosing ? "closing" : "open"}`} onMouseDown={closeCustomerEditor}>
+          <section className="customerEditModal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modalHeader">
+              <div>
+                <span>CLIENTE</span>
+                <h3>Editar cliente {editor.name}</h3>
+              </div>
+              <IconButton title="Cerrar" onClick={closeCustomerEditor} icon={X} />
+            </div>
+            <form onSubmit={updateCustomer}>
+              <div className="formGrid two">
+                <Field label="Nombre">
+                  <input required value={editor.name} onChange={(event) => setNested(setForms, "customerEditor", "name", uppercaseCustomerName(event.target.value))} />
+                </Field>
+                <Field label="Estado">
+                  <select value={editor.active ? "true" : "false"} onChange={(event) => setNested(setForms, "customerEditor", "active", event.target.value === "true")}>
+                    <option value="true">Activo</option>
+                    <option value="false">Inactivo</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="actionBar modalActions">
+                <button className="primaryBtn">Guardar cambios</button>
+                <button type="button" className="secondaryBtn" onClick={closeCustomerEditor}>Cancelar</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </>
   );
 }
@@ -1574,12 +1676,11 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
   const activeCylinders = cylinders.filter((item) => item.active !== false);
   const activeProducts = products.filter((item) => item.active !== false);
   const showingCreation = mode === "create";
-  const activeSalesFilter = exclusiveFilterKey(salesDateFilter, ["dateFilterType", "noteNumber", "customerName"]);
-  const activeSalesFilterLabel = {
-    dateFilterType: "Fecha",
-    noteNumber: "Número de nota",
-    customerName: "Cliente"
-  }[activeSalesFilter];
+  const requiresTypeSelection = showingCreation && !form.id && !form.noteType;
+  const showUtilityField = Boolean(form.id) || form.noteType !== "RECEPCION";
+  const salesFilterHasNoteNumber = salesNoteFilterHasNoteNumber(salesDateFilter);
+  const salesFilterHasDateOrCustomer = salesNoteFilterHasDate(salesDateFilter) || salesNoteFilterHasCustomerName(salesDateFilter);
+  const hasAnySalesFilter = salesFilterHasNoteNumber || salesFilterHasDateOrCustomer;
   const customerNameSuggestions = useMemo(
     () => customers.map((customer) => uppercaseCustomerName(customer.name)).sort((left, right) => left.localeCompare(right, "es-BO")),
     [customers]
@@ -1606,36 +1707,42 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
     return Array.from(suggestions.values()).sort((left, right) => left.localeCompare(right, "es-BO"));
   }, [customerNameSuggestions, inventory, cylinders]);
   const ownerNameSuggestion = (value) => findOwnerNameSuggestion(ownerNameSuggestions, value);
+  const cylinderNumberSuggestions = useMemo(
+    () => activeCylinders.map((cylinder) => cylinder.serialNumber).sort((left, right) => left.localeCompare(right, "es-BO", { numeric: true })),
+    [activeCylinders]
+  );
+  const cylinderNumberSuggestion = (value) => findOwnerNameSuggestion(cylinderNumberSuggestions, value);
   const customerNameSuggestion = findOwnerNameSuggestion(customerNameSuggestions, form.customerName);
   const customerNameKey = normalizeCustomerNameKey(form.customerName);
   const customerExists = customerNameKey ? existingCustomerNames.has(customerNameKey) : false;
   const existingCylinderNumbers = useMemo(() => new Set((cylinders || []).map((cylinder) => normalizeCylinderNumberKey(cylinder.serialNumber)).filter(Boolean)), [cylinders]);
   const cylinderHint = (value) => {
     const cylinderKey = normalizeCylinderNumberKey(value);
-    if (!cylinderKey) return null;
-    const cylinderExists = existingCylinderNumbers.has(cylinderKey);
+    if (!cylinderKey || existingCylinderNumbers.has(cylinderKey)) return null;
     return (
-      <span className={cylinderExists ? "customerHint customerHintSuccess" : "customerHint customerHintWarning"}>
-        {cylinderExists ? "Cilindro ya existe en el apartado Cilindros." : "Este cilindro no existe en la base de datos. Se solicitará confirmación antes de registrarlo."}
+      <span className="customerHint customerHintWarning">
+        Este cilindro no existe en la base de datos. Se solicitará confirmación antes de registrarlo.
       </span>
     );
   };
+  const cylinderIsRegistered = (value) => {
+    const cylinderKey = normalizeCylinderNumberKey(value);
+    return Boolean(cylinderKey) && existingCylinderNumbers.has(cylinderKey);
+  };
   const ownershipHint = (value) => {
     const ownerNameKey = normalizeCustomerNameKey(value);
-    if (!ownerNameKey) return null;
-    if (ownerNameKey === normalizeCustomerNameKey(BRAND_OWNER_NAME)) {
-      return (
-        <span className="customerHint customerHintSuccess">
-          Propiedad de la empresa.
-        </span>
-      );
-    }
-    const ownerExists = existingCustomerNames.has(ownerNameKey);
+    if (!ownerNameKey || ownerNameKey === normalizeCustomerNameKey(BRAND_OWNER_NAME)) return null;
+    if (existingCustomerNames.has(ownerNameKey)) return null;
     return (
-      <span className={ownerExists ? "customerHint customerHintSuccess" : "customerHint customerHintWarning"}>
-        {ownerExists ? "Propietario ya existe en el apartado Clientes." : "Propietario no detectado en el apartado Clientes."}
+      <span className="customerHint customerHintWarning">
+        Propietario no detectado en el apartado Clientes.
       </span>
     );
+  };
+  const ownerNameIsValid = (value) => {
+    const ownerNameKey = normalizeCustomerNameKey(value);
+    if (!ownerNameKey) return false;
+    return ownerNameKey === normalizeCustomerNameKey(BRAND_OWNER_NAME) || existingCustomerNames.has(ownerNameKey);
   };
   return (
     <>
@@ -1646,16 +1753,26 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
       />
       {showingCreation && (
       <Card title={form.id ? "Editar nota" : "Nueva nota"}>
+        {requiresTypeSelection ? (
+          <SaleTypePrompt onSelect={(noteType) => setNested(setForms, "sale", "noteType", noteType)} />
+        ) : (
+        <>
         <div className="salesComposer">
           <form onSubmit={createSale}>
-            <div className="formGrid five">
+            {!form.id && (
+              <div className="saleTypeBadge">
+                <span>Tipo de nota: <strong>{form.noteType === "ENTREGA" ? "Nota de entrega" : "Nota de recepción"}</strong></span>
+                <button type="button" className="secondaryBtn" onClick={() => resetSaleType(setForms)}>Cambiar tipo</button>
+              </div>
+            )}
+            <div className={showUtilityField ? "formGrid five" : "formGrid four"}>
               <Field label="Número">
                 <input required disabled value={form.noteNumber} placeholder="Se asignará automáticamente" />
               </Field>
               <Field label="Cliente" className="floatingHintField">
-                {customerNameKey && (
-                  <span className={customerExists ? "customerHint customerHintSuccess" : "customerHint customerHintWarning"}>
-                    {customerExists ? "Cliente ya existe en el apartado Clientes." : "Cliente no detectado en el apartado Clientes."}
+                {customerNameKey && !customerExists && (
+                  <span className="customerHint customerHintWarning">
+                    Cliente no detectado en el apartado Clientes.
                   </span>
                 )}
                 <AutocompleteInput
@@ -1666,6 +1783,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                   onChange={(event) => setNested(setForms, "sale", "customerName", uppercaseCustomerName(event.target.value))}
                   onSuggestionAccept={(suggestion) => setNested(setForms, "sale", "customerName", suggestion)}
                   placeholder="Cliente"
+                  showCheck={customerExists}
                 />
                 <datalist id="sales-customer-suggestions">
                   {customerNameSuggestions.map((name) => <option key={name} value={name} />)}
@@ -1674,17 +1792,18 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
               <Field label="Fecha">
                 <input required type="datetime-local" value={form.noteDate} onChange={(event) => setNested(setForms, "sale", "noteDate", event.target.value)} />
               </Field>
-              <Field label="Utilidad (Bs)">
-                <input type="number" min="0" step="0.01" value={form.utilityAmount} onChange={(event) => setNested(setForms, "sale", "utilityAmount", event.target.value)} placeholder="0.00" />
-              </Field>
+              {showUtilityField && (
+                <Field label="Utilidad (Bs)">
+                  <input type="number" min="0" step="0.01" value={form.utilityAmount} onChange={(event) => setNested(setForms, "sale", "utilityAmount", event.target.value)} placeholder="0.00" />
+                </Field>
+              )}
               <Field label="Observación">
                 <input value={form.observations} onChange={(event) => setNested(setForms, "sale", "observations", event.target.value)} placeholder="Detalle opcional" />
               </Field>
             </div>
             {form.id ? (
               <div className="notice">Editando datos generales. Para corregir cilindros, anula la nota y registra una nueva.</div>
-            ) : (
-              <>
+            ) : form.noteType === "ENTREGA" ? (
                 <LineSection title="Cilindros entregados" icon={ArrowUpFromLine} lines={form.deliveredCylinders} onAdd={() => requestAddSaleCylinderLine("deliveredCylinders", emptyDeliveredLine)}>
                   {(line, index) => {
                     const selected = findCylinderByNumber(activeCylinders, line.cylinderNumber);
@@ -1693,13 +1812,27 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                       <div className="lineGrid deliveredLine" key={index}>
                         <Field label="Nro. cilindro" className="floatingHintField">
                           {cylinderHint(line.cylinderNumber)}
-                          <input required={started} value={line.cylinderNumber} onChange={(event) => {
-                            const selectedCylinder = findCylinderByNumber(activeCylinders, event.target.value);
-                            updateSaleLine(setForms, "deliveredCylinders", index, "cylinderNumber", event.target.value, {
-                              capacityM3: selectedCylinder?.capacityM3 ?? "",
-                              ownerName: selectedCylinder ? saleCylinderOwnerName(selectedCylinder) : ""
-                            });
-                          }} placeholder="1001" />
+                          <AutocompleteInput
+                            required={started}
+                            value={line.cylinderNumber}
+                            suggestion={cylinderNumberSuggestion(line.cylinderNumber)}
+                            onChange={(event) => {
+                              const selectedCylinder = findCylinderByNumber(activeCylinders, event.target.value);
+                              updateSaleLine(setForms, "deliveredCylinders", index, "cylinderNumber", event.target.value, {
+                                capacityM3: selectedCylinder?.capacityM3 ?? "",
+                                ownerName: selectedCylinder ? saleCylinderOwnerName(selectedCylinder) : ""
+                              });
+                            }}
+                            onSuggestionAccept={(suggestion) => {
+                              const selectedCylinder = findCylinderByNumber(activeCylinders, suggestion);
+                              updateSaleLine(setForms, "deliveredCylinders", index, "cylinderNumber", suggestion, {
+                                capacityM3: selectedCylinder?.capacityM3 ?? "",
+                                ownerName: selectedCylinder ? saleCylinderOwnerName(selectedCylinder) : ""
+                              });
+                            }}
+                            placeholder="1001"
+                            showCheck={cylinderIsRegistered(line.cylinderNumber)}
+                          />
                         </Field>
                         <Field label="Producto">
                           <select required={started} value={line.productId} onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "productId", event.target.value)}>
@@ -1722,6 +1855,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                             onChange={(event) => updateSaleLine(setForms, "deliveredCylinders", index, "ownerName", uppercaseCustomerName(event.target.value))}
                             onSuggestionAccept={(suggestion) => updateSaleLine(setForms, "deliveredCylinders", index, "ownerName", suggestion)}
                             placeholder={selected ? saleCylinderOwnerName(selected) || "Dueño del cilindro" : "Dueño del cilindro"}
+                            showCheck={ownerNameIsValid(line.ownerName)}
                           />
                         </Field>
                         <Field label="Observación">
@@ -1732,6 +1866,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                     );
                   }}
                 </LineSection>
+            ) : (
                 <LineSection title="Cilindros recogidos" icon={ArrowDownToLine} lines={form.collectedCylinders} onAdd={() => requestAddSaleCylinderLine("collectedCylinders", emptyCollectedLine)}>
                   {(line, index) => {
                     const selected = findCylinderByNumber(activeCylinders, line.cylinderNumber);
@@ -1740,13 +1875,27 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                       <div className="lineGrid collectedLine" key={index}>
                         <Field label="Nro. cilindro" className="floatingHintField">
                           {cylinderHint(line.cylinderNumber)}
-                          <input required={started} value={line.cylinderNumber} onChange={(event) => {
-                            const selectedCylinder = findCylinderByNumber(activeCylinders, event.target.value);
-                            updateSaleLine(setForms, "collectedCylinders", index, "cylinderNumber", event.target.value, {
-                              capacityM3: selectedCylinder?.capacityM3 ?? "",
-                              ownerName: selectedCylinder ? saleCylinderOwnerName(selectedCylinder) : ""
-                            });
-                          }} placeholder="1001" />
+                          <AutocompleteInput
+                            required={started}
+                            value={line.cylinderNumber}
+                            suggestion={cylinderNumberSuggestion(line.cylinderNumber)}
+                            onChange={(event) => {
+                              const selectedCylinder = findCylinderByNumber(activeCylinders, event.target.value);
+                              updateSaleLine(setForms, "collectedCylinders", index, "cylinderNumber", event.target.value, {
+                                capacityM3: selectedCylinder?.capacityM3 ?? "",
+                                ownerName: selectedCylinder ? saleCylinderOwnerName(selectedCylinder) : ""
+                              });
+                            }}
+                            onSuggestionAccept={(suggestion) => {
+                              const selectedCylinder = findCylinderByNumber(activeCylinders, suggestion);
+                              updateSaleLine(setForms, "collectedCylinders", index, "cylinderNumber", suggestion, {
+                                capacityM3: selectedCylinder?.capacityM3 ?? "",
+                                ownerName: selectedCylinder ? saleCylinderOwnerName(selectedCylinder) : ""
+                              });
+                            }}
+                            placeholder="1001"
+                            showCheck={cylinderIsRegistered(line.cylinderNumber)}
+                          />
                         </Field>
                         <Field label="Producto">
                           <select value={line.productId} onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "productId", event.target.value)}>
@@ -1766,6 +1915,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                             onChange={(event) => updateSaleLine(setForms, "collectedCylinders", index, "ownerName", uppercaseCustomerName(event.target.value))}
                             onSuggestionAccept={(suggestion) => updateSaleLine(setForms, "collectedCylinders", index, "ownerName", suggestion)}
                             placeholder={selected ? saleCylinderOwnerName(selected) || "Dueño del cilindro" : "Dueño del cilindro"}
+                            showCheck={ownerNameIsValid(line.ownerName)}
                           />
                         </Field>
                         <Field label="Observación">
@@ -1776,7 +1926,6 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                     );
                   }}
                 </LineSection>
-              </>
             )}
             <div className="actionBar">
               <button className="primaryBtn">{form.id ? "Guardar cambios" : "Crear nota"}</button>
@@ -1785,19 +1934,20 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
           </form>
         </div>
         <SalePreview form={form} cylinders={cylinders} products={products} />
+        </>
+        )}
       </Card>
       )}
       {!showingCreation && (
       <Card title="Notas registradas">
-        <ExclusiveFilterNotice activeFilterLabel={activeSalesFilterLabel} />
         <DatePeriodFilter
           value={salesDateFilter}
           onChange={setSalesDateFilter}
           onApply={searchSalesNotes}
           onClear={searchSalesNotes}
           applyLabel="Buscar"
-          applyDisabled={!activeSalesFilter}
-          periodDisabled={Boolean(activeSalesFilter && activeSalesFilter !== "dateFilterType")}
+          applyDisabled={!hasAnySalesFilter}
+          periodDisabled={salesFilterHasNoteNumber}
           clearValueFactory={createSalesNoteFilter}
           className="salesNotesFilter"
         >
@@ -1812,7 +1962,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                 if (event.key === "Enter") searchSalesNotes(salesDateFilter);
               }}
               placeholder="NV-000123"
-              disabled={Boolean(activeSalesFilter && activeSalesFilter !== "noteNumber")}
+              disabled={salesFilterHasDateOrCustomer}
             />
           </Field>
           <Field label="Cliente">
@@ -1826,7 +1976,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                 if (event.key === "Enter") searchSalesNotes(salesDateFilter);
               }}
               placeholder="Nombre del cliente"
-              disabled={Boolean(activeSalesFilter && activeSalesFilter !== "customerName")}
+              disabled={salesFilterHasNoteNumber}
             />
           </Field>
         </DatePeriodFilter>
@@ -1845,7 +1995,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
               <IconButton title="Anular nota" onClick={() => cancelSale(note)} icon={Trash2} disabled={note.status === "CANCELLED"} />
             </div>
           ])}
-          empty={activeSalesFilter ? "No se encontraron notas con el filtro indicado" : "Selecciona un filtro para buscar notas registradas"}
+          empty={hasAnySalesFilter ? "No se encontraron notas con el filtro indicado" : "Selecciona un filtro para buscar notas registradas"}
           onRowClick={(index) => setDetailNote(salesNotes[index])}
         />
       </Card>
@@ -2239,9 +2389,43 @@ function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId,
   );
 }
 
+function SaleTypePrompt({ onSelect }) {
+  return (
+    <div className="saleTypePrompt">
+      <p className="saleTypePromptText">Selecciona el tipo de nota antes de continuar. No podrás combinar entregas y recepciones en la misma nota.</p>
+      <div className="saleTypeOptions">
+        <button type="button" className="saleTypeOption" onClick={() => onSelect("ENTREGA")}>
+          <ArrowUpFromLine size={22} />
+          <strong>Nota de entrega</strong>
+          <span>Entrega cilindros llenos a un cliente.</span>
+        </button>
+        <button type="button" className="saleTypeOption" onClick={() => onSelect("RECEPCION")}>
+          <ArrowDownToLine size={22} />
+          <strong>Nota de recepción</strong>
+          <span>Recibe cilindros vacíos de un cliente.</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function resetSaleType(setForms) {
+  setForms((current) => ({
+    ...current,
+    sale: {
+      ...current.sale,
+      noteType: null,
+      deliveredCylinders: [{ ...emptyDeliveredLine }],
+      collectedCylinders: [{ ...emptyCollectedLine }]
+    }
+  }));
+}
+
 function SalePreview({ form, cylinders, products }) {
   const delivered = previewDeliveredLines(form.deliveredCylinders, cylinders, products);
   const collected = previewCollectedLines(form.collectedCylinders, cylinders, products);
+  const showDelivered = Boolean(form.id) || form.noteType !== "RECEPCION";
+  const showCollected = Boolean(form.id) || form.noteType !== "ENTREGA";
   const deliveredCapacity = sumCapacity(delivered);
   const collectedCapacity = sumCapacity(collected);
   const totalAmount = delivered.reduce((total, line) => total + Number(line.amount || 0), 0);
@@ -2265,27 +2449,33 @@ function SalePreview({ form, cylinders, products }) {
           <span>Total venta</span>
           <strong>{money(totalAmount)}</strong>
         </div>
-        <div className="previewBlock">
-          <span>Utilidad</span>
-          <strong>{money(moneyInputValue(form.utilityAmount))}</strong>
-        </div>
+        {showDelivered && (
+          <div className="previewBlock">
+            <span>Utilidad</span>
+            <strong>{money(moneyInputValue(form.utilityAmount))}</strong>
+          </div>
+        )}
         <div className="previewBlock full">
           <span>Observación general</span>
           <p>{form.observations || "Sin observación general"}</p>
         </div>
       </div>
-      <PreviewSection
-        title="Cilindros entregados"
-        empty="Aún no se agregaron cilindros entregados."
-        rows={delivered.map((line, index) => [index + 1, line.serialNumber, line.productName, line.capacityM3 ? `${line.capacityM3} m3` : "-", line.ownerName || "-", line.amount === "" || line.amount == null ? "-" : money(line.amount), line.observations || "-"])}
-        columns={["Nro.", "Número de serie", "Producto", "Capacidad (m3)", "Propiedad", "Monto", "Observación"]}
-      />
-      <PreviewSection
-        title="Cilindros recogidos"
-        empty="Aún no se agregaron cilindros recogidos."
-        rows={collected.map((line, index) => [index + 1, line.serialNumber, line.productName, line.capacityM3 ? `${line.capacityM3} m3` : "-", line.ownerName || "-", line.observations || "-"])}
-        columns={["Nro.", "Número de serie", "Producto", "Capacidad (m3)", "Propiedad", "Observación"]}
-      />
+      {showDelivered && (
+        <PreviewSection
+          title="Cilindros entregados"
+          empty="Aún no se agregaron cilindros entregados."
+          rows={delivered.map((line, index) => [index + 1, line.serialNumber, line.productName, line.capacityM3 ? `${line.capacityM3} m3` : "-", line.ownerName || "-", line.amount === "" || line.amount == null ? "-" : money(line.amount), line.observations || "-"])}
+          columns={["Nro.", "Número de serie", "Producto", "Capacidad (m3)", "Propiedad", "Monto", "Observación"]}
+        />
+      )}
+      {showCollected && (
+        <PreviewSection
+          title="Cilindros recogidos"
+          empty="Aún no se agregaron cilindros recogidos."
+          rows={collected.map((line, index) => [index + 1, line.serialNumber, line.productName, line.capacityM3 ? `${line.capacityM3} m3` : "-", line.ownerName || "-", line.observations || "-"])}
+          columns={["Nro.", "Número de serie", "Producto", "Capacidad (m3)", "Propiedad", "Observación"]}
+        />
+      )}
       <div className="previewSummary">
         <span>Entregados: <strong>{delivered.length}</strong></span>
         <span>Recogidos: <strong>{collected.length}</strong></span>
@@ -2653,7 +2843,7 @@ function ExclusiveFilterNotice({ activeFilterLabel }) {
   );
 }
 
-function AutocompleteInput({ value, suggestion, onChange, onSuggestionAccept, placeholder, required = false, list }) {
+function AutocompleteInput({ value, suggestion, onChange, onSuggestionAccept, placeholder, required = false, list, showCheck = false }) {
   const handleKeyDown = (event) => {
     if (!suggestion || !onSuggestionAccept) return;
     if (event.key === "Tab" || event.key === "ArrowRight") {
@@ -2663,7 +2853,8 @@ function AutocompleteInput({ value, suggestion, onChange, onSuggestionAccept, pl
   };
 
   return (
-    <div className="autocompleteInput">
+    <div className={showCheck ? "autocompleteInput hasCheck" : "autocompleteInput"}>
+      {showCheck && <span className="autocompleteCheck" aria-hidden="true" />}
       {suggestion && (
         <span className="autocompleteGhost">
           <span className="autocompleteGhostPrefix">{value}</span>
@@ -2699,10 +2890,12 @@ function LineSection({ title, icon: Icon, lines, onAdd, children }) {
     <div className="lineSection">
       <div className="lineSectionHead">
         <PanelTitle icon={Icon} title={title} />
-        <button type="button" className="addLineBtn iconTextBtn" onClick={onAdd}><Plus size={16} /> Añadir</button>
       </div>
       <div className="lineList">
         {visibleLines.map((line, index) => children(line, index))}
+      </div>
+      <div className="lineSectionFoot">
+        <button type="button" className="addLineBtn iconTextBtn" onClick={onAdd}><Plus size={16} /> Añadir</button>
       </div>
     </div>
   );
@@ -3041,15 +3234,48 @@ function buildDateQuery(filter) {
   return `?${params.toString()}`;
 }
 
+function salesNoteFilterHasNoteNumber(filter) {
+  return Boolean(String(filter?.noteNumber || "").trim());
+}
+
+function salesNoteFilterHasCustomerName(filter) {
+  return Boolean(String(filter?.customerName || "").trim());
+}
+
+function salesNoteFilterHasDate(filter) {
+  return Boolean(filter?.dateFilterType);
+}
+
+function salesNoteFilterIsActive(filter) {
+  return salesNoteFilterHasNoteNumber(filter) || salesNoteFilterHasDate(filter) || salesNoteFilterHasCustomerName(filter);
+}
+
 function buildSalesNoteQuery(filter) {
-  const activeFilter = exclusiveFilterKey(filter, ["dateFilterType", "noteNumber", "customerName"]);
-  if (activeFilter === "dateFilterType") return buildDateQuery(filter);
+  const noteNumber = String(filter?.noteNumber || "").trim();
+  if (noteNumber) {
+    const params = new URLSearchParams();
+    params.set("noteNumber", noteNumber);
+    return `?${params.toString()}`;
+  }
 
   const params = new URLSearchParams();
-  const noteNumber = String(filter?.noteNumber || "").trim();
+  if (filter?.dateFilterType) {
+    params.set("dateFilterType", filter.dateFilterType);
+    if (filter.dateFilterType === "DAY") {
+      params.set("date", filter.date);
+    }
+    if (filter.dateFilterType === "MONTH") {
+      params.set("month", filter.month);
+      params.set("year", filter.year);
+    }
+    if (filter.dateFilterType === "YEAR") {
+      params.set("year", filter.year);
+    }
+  }
   const customerName = String(filter?.customerName || "").trim();
-  if (activeFilter === "noteNumber" && noteNumber) params.set("noteNumber", noteNumber);
-  if (activeFilter === "customerName" && customerName) params.set("customerName", customerName);
+  if (customerName) {
+    params.set("customerName", customerName);
+  }
   return params.toString() ? `?${params.toString()}` : "";
 }
 
