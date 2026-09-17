@@ -1161,6 +1161,30 @@ button {
   grid-template-columns: minmax(140px, 0.8fr) minmax(160px, 1fr) 120px minmax(180px, 1fr) minmax(220px, 1fr) auto;
 }
 
+.lineGridHeader {
+  margin-bottom: 4px;
+  align-items: end;
+}
+
+.lineGridHeader span {
+  color: #3d4f67;
+  font-weight: 550;
+  font-size: 14px;
+}
+
+@media (min-width: 1181px) {
+  .deliveredLine.lineGrid:not(.lineGridHeader) > .field > span,
+  .collectedLine.lineGrid:not(.lineGridHeader) > .field > span {
+    display: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  .lineGridHeader {
+    display: none;
+  }
+}
+
 .readonlyInfo {
   min-height: 44px;
   border: 1px solid #d4e4ef;

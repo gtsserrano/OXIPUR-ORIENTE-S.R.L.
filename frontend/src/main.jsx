@@ -1804,7 +1804,14 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
             {form.id ? (
               <div className="notice">Editando datos generales. Para corregir cilindros, anula la nota y registra una nueva.</div>
             ) : form.noteType === "ENTREGA" ? (
-                <LineSection title="Cilindros entregados" icon={ArrowUpFromLine} lines={form.deliveredCylinders} onAdd={() => requestAddSaleCylinderLine("deliveredCylinders", emptyDeliveredLine)}>
+                <LineSection
+                  title="Cilindros entregados"
+                  icon={ArrowUpFromLine}
+                  lines={form.deliveredCylinders}
+                  onAdd={() => requestAddSaleCylinderLine("deliveredCylinders", emptyDeliveredLine)}
+                  headerLabels={["Nro. cilindro", "Producto", "Capacidad (m3)", "Monto (Bs)", "Propiedad", "Observación", ""]}
+                  rowClassName="deliveredLine"
+                >
                   {(line, index) => {
                     const selected = findCylinderByNumber(activeCylinders, line.cylinderNumber);
                     const started = saleLineHasAnyValue(line);
@@ -1867,7 +1874,14 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
                   }}
                 </LineSection>
             ) : (
-                <LineSection title="Cilindros recogidos" icon={ArrowDownToLine} lines={form.collectedCylinders} onAdd={() => requestAddSaleCylinderLine("collectedCylinders", emptyCollectedLine)}>
+                <LineSection
+                  title="Cilindros recogidos"
+                  icon={ArrowDownToLine}
+                  lines={form.collectedCylinders}
+                  onAdd={() => requestAddSaleCylinderLine("collectedCylinders", emptyCollectedLine)}
+                  headerLabels={["Nro. cilindro", "Producto", "Capacidad (m3)", "Propiedad", "Observación", ""]}
+                  rowClassName="collectedLine"
+                >
                   {(line, index) => {
                     const selected = findCylinderByNumber(activeCylinders, line.cylinderNumber);
                     const started = saleLineHasAnyValue(line);
@@ -2883,7 +2897,7 @@ function PanelTitle({ icon: Icon, title }) {
   );
 }
 
-function LineSection({ title, icon: Icon, lines, onAdd, children }) {
+function LineSection({ title, icon: Icon, lines, onAdd, headerLabels, rowClassName, children }) {
   const visibleLines = (lines || []).length ? lines : [{}];
 
   return (
@@ -2891,6 +2905,11 @@ function LineSection({ title, icon: Icon, lines, onAdd, children }) {
       <div className="lineSectionHead">
         <PanelTitle icon={Icon} title={title} />
       </div>
+      {headerLabels && (
+        <div className={`lineGrid lineGridHeader ${rowClassName || ""}`.trim()}>
+          {headerLabels.map((label, index) => <span key={index}>{label}</span>)}
+        </div>
+      )}
       <div className="lineList">
         {visibleLines.map((line, index) => children(line, index))}
       </div>
