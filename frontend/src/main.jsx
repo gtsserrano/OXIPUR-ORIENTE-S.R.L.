@@ -12,7 +12,9 @@ import {
   Edit3,
   Eye,
   Gauge,
+  Hash,
   History,
+  Layers,
   LayoutDashboard,
   Banknote,
   CheckCircle2,
@@ -21,6 +23,7 @@ import {
   Plus,
   Printer,
   RefreshCw,
+  Search,
   LoaderCircle,
   Trash2,
   UserRound,
@@ -28,7 +31,7 @@ import {
   Warehouse,
   X
 } from "lucide-react";
-import "./styles.css";
+import "./styles.navy.css";
 
 const BRAND_NAME = "OXIPUR ORIENTE S.R.L.";
 const BRAND_OWNER_NAME = "OXIPUR";
@@ -45,6 +48,7 @@ const DETAIL_MODAL_CLOSE_MS = 180;
 const SALE_NOTE_TEMPLATE_URL = "/formato-nota-entrega.pdf";
 const SALE_NOTE_TEMPLATE_PAGE_INDEX = 1;
 const SALE_NOTE_ROWS_PER_PAGE = 16;
+const RECENT_NOTES_LIMIT = 20;
 
 const navItems = [
   { id: "dashboard", label: "Centro operativo", icon: LayoutDashboard },
@@ -161,6 +165,7 @@ function App() {
     inventory: [],
     movements: [],
     salesNotes: [],
+    recentSalesNotes: [],
     operationalAlerts: null,
     utilitiesSummary: null,
     utilitiesLoading: false,
@@ -179,6 +184,7 @@ function App() {
   const [selectedPrintNoteId, setSelectedPrintNoteId] = useState("");
   const [printingFilter, setPrintingFilter] = useState(createPrintingNoteFilter(false));
   const [printingNotes, setPrintingNotes] = useState([]);
+  const [recentPrintingNotes, setRecentPrintingNotes] = useState([]);
   const [printingLoading, setPrintingLoading] = useState(false);
   const [missingCylinderDialog, setMissingCylinderDialog] = useState(null);
   const visibleNavItems = useMemo(() => filterNavItemsForSession(navItems, session), [session?.profile?.roleName]);
@@ -192,13 +198,14 @@ function App() {
       const salesDateQuery = buildSalesNoteQuery(salesDateFilter);
       const movementDateQuery = buildDateQuery(movementDateFilter);
       const utilityDateQuery = buildDateQuery(utilityDateFilter);
-      const [cylinders, products, customers, inventory, movements, salesNotes, operationalAlerts, profiles, utilitiesSummary] = await Promise.all([
+      const [cylinders, products, customers, inventory, movements, salesNotes, recentSalesNotes, operationalAlerts, profiles, utilitiesSummary] = await Promise.all([
         api("/api/cylinders"),
         api("/api/products"),
         api("/api/customers"),
         api("/api/inventory/cylinders"),
         api(`/api/inventory-movements${movementDateQuery}`),
         hasSalesNoteFilter ? api(`/api/sales-notes${salesDateQuery}`) : Promise.resolve([]),
+        api(`/api/sales-notes/recent?limit=${RECENT_NOTES_LIMIT}`),
         api("/api/operational-alerts"),
         canManageProfiles ? api("/api/profiles") : Promise.resolve([]),
         canViewUtilities ? api(`/api/utilities/summary${utilityDateQuery}`) : Promise.resolve(null)
@@ -212,6 +219,7 @@ function App() {
         inventory,
         movements,
         salesNotes,
+        recentSalesNotes,
         operationalAlerts,
         utilitiesSummary,
         loading: false,
@@ -234,8 +242,13 @@ function App() {
   }, [session?.accessToken, active, forms.sale.id]);
 
   useEffect(() => {
+    if (!session || active !== "sales-registered") return;
+    loadRecentSalesNotes();
+  }, [session?.accessToken, active]);
+
+  useEffect(() => {
     if (!session || active !== "printing") return;
-    searchPrintingNotes(printingFilter);
+    loadRecentPrintingNotes();
   }, [session?.accessToken, active]);
 
   useEffect(() => {
@@ -384,6 +397,15 @@ function App() {
     setState((value) => ({ ...value, inventory }));
   }
 
+  async function loadRecentSalesNotes() {
+    try {
+      const recentSalesNotes = await api(`/api/sales-notes/recent?limit=${RECENT_NOTES_LIMIT}`);
+      setState((value) => ({ ...value, recentSalesNotes }));
+    } catch (error) {
+      notify(error.message);
+    }
+  }
+
   async function searchSalesNotes(nextFilter = salesDateFilter) {
     if (!exclusiveFilterKey(nextFilter, ["dateFilterType", "noteNumber", "customerName"])) {
       setState((value) => ({ ...value, salesNotes: [] }));
@@ -394,22 +416,27 @@ function App() {
   }
 
   async function searchPrintingNotes(nextFilter = printingFilter) {
-    if (!exclusiveFilterKey(nextFilter, ["date", "noteNumber"])) {
+    if (!printingFilterState(nextFilter).isActive) {
       setPrintingNotes([]);
-      setSelectedPrintNoteId("");
       return;
     }
     setPrintingLoading(true);
     try {
       const notes = await api(`/api/sales-notes${buildPrintingNoteQuery(nextFilter)}`);
       setPrintingNotes(notes);
-      setSelectedPrintNoteId((current) => (
-        notes.some((note) => String(note.id) === String(current)) ? current : ""
-      ));
     } catch (error) {
       notify(error.message);
     } finally {
       setPrintingLoading(false);
+    }
+  }
+
+  async function loadRecentPrintingNotes() {
+    try {
+      const notes = await api(`/api/sales-notes/recent?limit=${RECENT_NOTES_LIMIT}`);
+      setRecentPrintingNotes(notes);
+    } catch (error) {
+      notify(error.message);
     }
   }
 
@@ -682,8 +709,7 @@ function App() {
           body: {
             customerName: uppercaseCustomerName(form.customerName),
             noteDate: form.noteDate,
-            observations: form.observations || null,
-            utilityAmount: moneyInputValue(form.utilityAmount)
+            observations: form.observations || null
           }
         });
         setForms((value) => ({ ...value, sale: newSaleForm() }));
@@ -758,7 +784,7 @@ function App() {
       customerName: uppercaseCustomerName(form.customerName),
       noteDate: form.noteDate,
       observations: form.observations || null,
-      utilityAmount: moneyInputValue(form.utilityAmount),
+      utilityAmount: saleUtilityAmount(form),
       registerMissingCylinders: false,
       deliveredCylinders,
       collectedCylinders
@@ -1018,6 +1044,7 @@ function App() {
         searchInventory={searchInventory}
         inventory={state.inventory}
         cylinders={state.cylinders}
+        customers={state.customers}
       />
     ),
     clients: (
@@ -1062,6 +1089,7 @@ function App() {
         customers={state.customers}
         inventory={state.inventory}
         salesNotes={state.salesNotes}
+        recentSalesNotes={state.recentSalesNotes}
         editSale={editSale}
         cancelSale={cancelSale}
         salesDateFilter={salesDateFilter}
@@ -1088,6 +1116,8 @@ function App() {
     printing: (
       <PrintingView
         salesNotes={printingNotes}
+        recentNotes={recentPrintingNotes}
+        customers={state.customers}
         selectedPrintNoteId={selectedPrintNoteId}
         setSelectedPrintNoteId={setSelectedPrintNoteId}
         printSaleNote={printSaleNote}
@@ -1375,7 +1405,7 @@ function Dashboard({ metrics, inventory, movements, operationalAlerts, movementD
   );
 }
 
-function InventoryView({ filters, setFilters, searchInventory, inventory, cylinders = [] }) {
+function InventoryView({ filters, setFilters, searchInventory, inventory, cylinders = [], customers = [] }) {
   const [selectedCylinder, setSelectedCylinder] = useState(null);
   const activeFilter = exclusiveFilterKey(filters, ["locationType", "customerName", "serialNumber"]);
   const activeFilterLabel = {
@@ -1419,10 +1449,10 @@ function InventoryView({ filters, setFilters, searchInventory, inventory, cylind
             </select>
           </Field>
           <Field label="Cliente">
-            <input
+            <CustomerFilterSelect
+              customers={customers}
               value={filters.customerName}
-              onChange={(event) => setFilters({ ...filters, customerName: event.target.value })}
-              placeholder="Nombre del cliente"
+              onChange={(customerName) => setFilters({ ...filters, customerName })}
               disabled={Boolean(activeFilter && activeFilter !== "customerName")}
             />
           </Field>
@@ -1670,7 +1700,7 @@ function ClientsView({ customers = [], initialInventory = [], forms, setForms, e
   );
 }
 
-function SalesView({ mode = "create", forms, setForms, createSale, cylinders, products, customers = [], inventory = [], salesNotes, editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes, requestAddSaleCylinderLine }) {
+function SalesView({ mode = "create", forms, setForms, createSale, cylinders, products, customers = [], inventory = [], salesNotes, recentSalesNotes = [], editSale, cancelSale, salesDateFilter, setSalesDateFilter, searchSalesNotes, requestAddSaleCylinderLine }) {
   const form = forms.sale;
   const [detailNote, setDetailNote] = useState(null);
   const activeCylinders = cylinders.filter((item) => item.active !== false);
@@ -1681,6 +1711,19 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
   const salesFilterHasNoteNumber = salesNoteFilterHasNoteNumber(salesDateFilter);
   const salesFilterHasDateOrCustomer = salesNoteFilterHasDate(salesDateFilter) || salesNoteFilterHasCustomerName(salesDateFilter);
   const hasAnySalesFilter = salesFilterHasNoteNumber || salesFilterHasDateOrCustomer;
+  const SALES_NOTE_COLUMNS = ["Número", "Cliente", "Fecha", "Total venta", "Estado", "Acciones"];
+  const salesNoteRow = (note) => [
+    note.noteNumber,
+    note.customerName,
+    formatDateTime(note.noteDate),
+    money(note.totalAmount),
+    note.status === "CANCELLED" ? <span className="dangerBadge">ANULADA</span> : "REGISTRADO",
+    <div className="rowActions">
+      <IconButton title="Ver detalle" onClick={() => setDetailNote(note)} icon={Eye} />
+      <IconButton title="Editar datos generales" onClick={() => editSale(note)} icon={Edit3} disabled={note.status === "CANCELLED"} />
+      <IconButton title="Anular nota" onClick={() => cancelSale(note)} icon={Trash2} disabled={note.status === "CANCELLED"} />
+    </div>
+  ];
   const customerNameSuggestions = useMemo(
     () => customers.map((customer) => uppercaseCustomerName(customer.name)).sort((left, right) => left.localeCompare(right, "es-BO")),
     [customers]
@@ -1794,7 +1837,7 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
               </Field>
               {showUtilityField && (
                 <Field label="Utilidad (Bs)">
-                  <input type="number" min="0" step="0.01" value={form.utilityAmount} onChange={(event) => setNested(setForms, "sale", "utilityAmount", event.target.value)} placeholder="0.00" />
+                  <input readOnly value={saleUtilityAmount(form).toFixed(2)} title="Se calcula con los precios de los cilindros entregados" />
                 </Field>
               )}
               <Field label="Observación">
@@ -1980,37 +2023,33 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
             />
           </Field>
           <Field label="Cliente">
-            <input
+            <CustomerFilterSelect
+              customers={customers}
               value={salesDateFilter.customerName}
-              onChange={(event) => setSalesDateFilter({
-                ...salesDateFilter,
-                customerName: uppercaseCustomerName(event.target.value)
-              })}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") searchSalesNotes(salesDateFilter);
-              }}
-              placeholder="Nombre del cliente"
+              onChange={(customerName) => setSalesDateFilter({ ...salesDateFilter, customerName })}
               disabled={salesFilterHasNoteNumber}
             />
           </Field>
         </DatePeriodFilter>
+        {(hasAnySalesFilter || salesNotes.length > 0) && (
+          <DataTable
+            compact
+            columns={SALES_NOTE_COLUMNS}
+            rows={salesNotes.map(salesNoteRow)}
+            empty="No se encontraron notas con el filtro indicado"
+            onRowClick={(index) => setDetailNote(salesNotes[index])}
+          />
+        )}
+      </Card>
+      )}
+      {!showingCreation && (
+      <Card title="Últimas 20 notas registradas">
         <DataTable
           compact
-          columns={["Número", "Cliente", "Fecha", "Total venta", "Estado", "Acciones"]}
-          rows={salesNotes.map((note) => [
-            note.noteNumber,
-            note.customerName,
-            formatDateTime(note.noteDate),
-            money(note.totalAmount),
-            note.status === "CANCELLED" ? <span className="dangerBadge">ANULADA</span> : "REGISTRADO",
-            <div className="rowActions">
-              <IconButton title="Ver detalle" onClick={() => setDetailNote(note)} icon={Eye} />
-              <IconButton title="Editar datos generales" onClick={() => editSale(note)} icon={Edit3} disabled={note.status === "CANCELLED"} />
-              <IconButton title="Anular nota" onClick={() => cancelSale(note)} icon={Trash2} disabled={note.status === "CANCELLED"} />
-            </div>
-          ])}
-          empty={hasAnySalesFilter ? "No se encontraron notas con el filtro indicado" : "Selecciona un filtro para buscar notas registradas"}
-          onRowClick={(index) => setDetailNote(salesNotes[index])}
+          columns={SALES_NOTE_COLUMNS}
+          rows={recentSalesNotes.map(salesNoteRow)}
+          empty="Todavía no hay notas de venta registradas"
+          onRowClick={(index) => setDetailNote(recentSalesNotes[index])}
         />
       </Card>
       )}
@@ -2022,13 +2061,14 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
             <div><span>Total venta</span><strong>{money(detailNote.totalAmount)}</strong></div>
             <div><span>Utilidad</span><strong>{money(detailNote.utilityAmount)}</strong></div>
             <div><span>Estado</span><strong>{detailNote.status === "CANCELLED" ? "ANULADA" : "REGISTRADA"}</strong></div>
-            <div><span>Origen</span><strong>{detailNote.sourceType === "SCRIPT" ? "MIGRACIÓN HISTÓRICA" : detailNote.sourceType}</strong></div>
+            <div><span>Cantidad</span><strong>{(detailNote.deliveredCylinders || []).length + (detailNote.collectedCylinders || []).length}</strong></div>
           </div>
           <PreviewSection
             title="Cilindros entregados"
             empty="La nota no tiene cilindros entregados."
-            columns={["Serie", "Producto", "Capacidad", "Propiedad", "Monto", "Observación"]}
-            rows={(detailNote.deliveredCylinders || []).map((line) => [
+            columns={["N°", "Serie", "Producto", "Capacidad", "Propiedad", "Monto", "Observación"]}
+            rows={(detailNote.deliveredCylinders || []).map((line, index) => [
+              index + 1,
               line.serialNumber || line.cylinderId,
               line.productName || "-",
               `${formatCapacity(line.capacityM3)} m3`,
@@ -2040,8 +2080,9 @@ function SalesView({ mode = "create", forms, setForms, createSale, cylinders, pr
           <PreviewSection
             title="Cilindros recibidos vacíos"
             empty="La nota no tiene cilindros recibidos."
-            columns={["Serie", "Producto", "Capacidad", "Propiedad", "Observación"]}
-            rows={(detailNote.collectedCylinders || []).map((line) => [
+            columns={["N°", "Serie", "Producto", "Capacidad", "Propiedad", "Observación"]}
+            rows={(detailNote.collectedCylinders || []).map((line, index) => [
+              index + 1,
               line.serialNumber || line.cylinderId,
               line.productName || "-",
               `${formatCapacity(line.capacityM3)} m3`,
@@ -2313,10 +2354,9 @@ function AuditChanges({ log }) {
   );
 }
 
-function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId, printSaleNote, filter, setFilter, searchNotes, loading }) {
-  const selectedNote = salesNotes.find((note) => String(note.id) === String(selectedPrintNoteId));
-  const activeFilter = exclusiveFilterKey(filter, ["date", "noteNumber"]);
-  const activeFilterLabel = { date: "Fecha", noteNumber: "Número de nota" }[activeFilter];
+function PrintingView({ salesNotes, recentNotes, customers = [], selectedPrintNoteId, setSelectedPrintNoteId, printSaleNote, filter, setFilter, searchNotes, loading }) {
+  const selectedNote = [...recentNotes, ...salesNotes].find((note) => String(note.id) === String(selectedPrintNoteId));
+  const filterState = printingFilterState(filter);
 
   function submitSearch(event) {
     event.preventDefault();
@@ -2331,16 +2371,24 @@ function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId,
 
   return (
     <>
-      <PageIntro eyebrow="IMPRESIÓN" title="Impresión" subtitle="Busca cualquier nota de venta utilizando un solo filtro a la vez." />
-      <Card title="Notas disponibles">
-        <ExclusiveFilterNotice activeFilterLabel={activeFilterLabel} />
+      <PageIntro eyebrow="IMPRESIÓN" title="Impresión" subtitle="Selecciona una de las últimas notas registradas o busca otra nota con un solo filtro a la vez." />
+      <Card title="Buscar otra nota">
+        <PrintingFilterGuide filterState={filterState} />
         <form className="printingSearch" onSubmit={submitSearch}>
           <Field label="Fecha de la nota">
             <input
               type="date"
               value={filter.date}
               onChange={(event) => setFilter({ ...filter, date: event.target.value })}
-              disabled={Boolean(activeFilter && activeFilter !== "date")}
+              disabled={filterState.lockDateAndCustomer}
+            />
+          </Field>
+          <Field label="Cliente">
+            <CustomerFilterSelect
+              customers={customers}
+              value={filter.customerName}
+              onChange={(customerName) => setFilter({ ...filter, customerName })}
+              disabled={filterState.lockDateAndCustomer}
             />
           </Field>
           <Field label="Número de nota">
@@ -2348,24 +2396,29 @@ function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId,
               value={filter.noteNumber}
               onChange={(event) => setFilter({ ...filter, noteNumber: event.target.value.toUpperCase() })}
               placeholder="NV-000123"
-              disabled={Boolean(activeFilter && activeFilter !== "noteNumber")}
+              disabled={filterState.lockNoteNumber}
             />
           </Field>
           <div className="dateFilterActions">
-            <button type="submit" className="primaryBtn iconTextBtn" disabled={loading || !activeFilter}>
+            <button type="submit" className="primaryBtn iconTextBtn" disabled={loading || !filterState.isActive}>
               {loading ? <><LoaderCircle className="spinIcon" size={16} /> Buscando...</> : "Buscar"}
             </button>
             <button type="button" className="secondaryBtn" onClick={clearSearch} disabled={loading}>Limpiar</button>
           </div>
         </form>
+        {(filterState.isActive || salesNotes.length > 0 || loading) && (
+          <DataTable
+            columns={PRINTING_NOTE_COLUMNS}
+            rows={salesNotes.map((note) => printingNoteRow(note, selectedPrintNoteId, setSelectedPrintNoteId))}
+            empty={loading ? "Buscando notas de venta..." : "No se encontraron notas con el filtro indicado"}
+          />
+        )}
+      </Card>
+      <Card title="Últimas 20 notas registradas">
         <div className="printingToolbar">
           <div>
             <span>Nota seleccionada</span>
             <strong>{selectedNote ? `${selectedNote.noteNumber} - ${selectedNote.customerName}` : "Ninguna"}</strong>
-          </div>
-          <div className="printingResultCount">
-            <span>Resultados</span>
-            <strong>{salesNotes.length}</strong>
           </div>
           <button
             type="button"
@@ -2377,30 +2430,94 @@ function PrintingView({ salesNotes, selectedPrintNoteId, setSelectedPrintNoteId,
           </button>
         </div>
         <DataTable
-          columns={["Seleccionar", "Número", "Cliente", "Fecha", "Importe total", "Estado"]}
-          rows={salesNotes.map((note) => [
-            <label className="printSelect">
-              <input
-                type="radio"
-                name="print-note"
-                checked={String(selectedPrintNoteId) === String(note.id)}
-                onChange={() => setSelectedPrintNoteId(String(note.id))}
-              />
-              <span />
-            </label>,
-            note.noteNumber,
-            note.customerName,
-            formatDateTime(note.noteDate),
-            money(note.totalAmount),
-            note.status === "CANCELLED" ? <span className="dangerBadge">ANULADA</span> : "REGISTERED"
-          ])}
-          empty={loading
-            ? "Buscando notas de venta..."
-            : activeFilter ? "No se encontraron notas con el filtro indicado" : "Selecciona un filtro para buscar notas de venta"}
+          columns={PRINTING_NOTE_COLUMNS}
+          rows={recentNotes.map((note) => printingNoteRow(note, selectedPrintNoteId, setSelectedPrintNoteId))}
+          empty="Todavía no hay notas de venta registradas"
         />
       </Card>
     </>
   );
+}
+
+// Filtro de cliente: solo permite elegir entre los clientes ya registrados.
+function CustomerFilterSelect({ customers = [], value, onChange, disabled }) {
+  const names = useMemo(
+    () => [...new Set(customers.map((customer) => String(customer.name || "").trim()).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right, "es-BO")),
+    [customers]
+  );
+  const hasStaleValue = Boolean(value) && !names.includes(value);
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      disabled={disabled || (!names.length && !value)}
+    >
+      <option value="">{names.length ? "Todos los clientes" : "Sin clientes registrados"}</option>
+      {hasStaleValue && <option value={value}>{value}</option>}
+      {names.map((name) => <option key={name} value={name}>{name}</option>)}
+    </select>
+  );
+}
+
+function PrintingFilterGuide({ filterState }) {
+  const status = filterState.hasNoteNumber
+    ? "Buscando por número de nota. Vacíalo o pulsa Limpiar para usar Fecha y Cliente."
+    : filterState.hasDate && filterState.hasCustomer
+      ? "Combinando Fecha y Cliente."
+      : filterState.hasDate || filterState.hasCustomer
+        ? "Puedes sumar el otro filtro para acotar más la búsqueda. Número de nota queda bloqueado."
+        : "";
+
+  return (
+    <div className="filterGuide" role="note">
+      <div className="filterGuideHeader">
+        <Search size={18} />
+        <div>
+          <strong>Cómo buscar una nota</strong>
+          <span>Elige una de estas dos formas de búsqueda:</span>
+        </div>
+      </div>
+      <div className="filterGuideOptions">
+        <div className={`filterGuideOption${filterState.hasDate || filterState.hasCustomer ? " active" : ""}`}>
+          <Layers size={18} />
+          <div>
+            <strong>Fecha + Cliente</strong>
+            <span>Se pueden usar juntos o por separado. Ideal para ver las notas de un cliente en un día.</span>
+          </div>
+        </div>
+        <div className={`filterGuideOption${filterState.hasNoteNumber ? " active" : ""}`}>
+          <Hash size={18} />
+          <div>
+            <strong>Número de nota</strong>
+            <span>Identifica una sola nota, por eso se usa solo, sin combinarlo.</span>
+          </div>
+        </div>
+      </div>
+      {status && <p className="filterGuideStatus">{status}</p>}
+    </div>
+  );
+}
+
+const PRINTING_NOTE_COLUMNS =["Seleccionar", "Número", "Cliente", "Fecha", "Importe total", "Estado"];
+
+function printingNoteRow(note, selectedPrintNoteId, setSelectedPrintNoteId) {
+  return [
+    <label className="printSelect">
+      <input
+        type="radio"
+        name="print-note"
+        checked={String(selectedPrintNoteId) === String(note.id)}
+        onChange={() => setSelectedPrintNoteId(String(note.id))}
+      />
+      <span />
+    </label>,
+    note.noteNumber,
+    note.customerName,
+    formatDateTime(note.noteDate),
+    money(note.totalAmount),
+    note.status === "CANCELLED" ? <span className="dangerBadge">ANULADA</span> : "REGISTERED"
+  ];
 }
 
 function SaleTypePrompt({ onSelect }) {
@@ -2466,7 +2583,7 @@ function SalePreview({ form, cylinders, products }) {
         {showDelivered && (
           <div className="previewBlock">
             <span>Utilidad</span>
-            <strong>{money(moneyInputValue(form.utilityAmount))}</strong>
+            <strong>{money(saleUtilityAmount(form))}</strong>
           </div>
         )}
         <div className="previewBlock full">
@@ -3228,7 +3345,24 @@ function createSalesNoteFilter(dateFilterType = "") {
 function createPrintingNoteFilter(useToday = true) {
   return {
     date: useToday ? todayDate() : "",
+    customerName: "",
     noteNumber: ""
+  };
+}
+
+// El número de nota identifica una sola nota, por eso no se combina con Fecha ni Cliente.
+// Fecha y Cliente sí se pueden combinar entre sí.
+function printingFilterState(filter) {
+  const hasNoteNumber = String(filter?.noteNumber ?? "").trim() !== "";
+  const hasDate = String(filter?.date ?? "").trim() !== "";
+  const hasCustomer = String(filter?.customerName ?? "").trim() !== "";
+  return {
+    hasNoteNumber,
+    hasDate,
+    hasCustomer,
+    isActive: hasNoteNumber || hasDate || hasCustomer,
+    lockNoteNumber: hasDate || hasCustomer,
+    lockDateAndCustomer: hasNoteNumber
   };
 }
 
@@ -3300,14 +3434,18 @@ function buildSalesNoteQuery(filter) {
 
 function buildPrintingNoteQuery(filter) {
   const params = new URLSearchParams();
-  const activeFilter = exclusiveFilterKey(filter, ["date", "noteNumber"]);
   const date = String(filter?.date || "").trim();
+  const customerName = String(filter?.customerName || "").trim();
   const noteNumber = String(filter?.noteNumber || "").trim();
-  if (activeFilter === "date" && date) {
+  if (noteNumber) {
+    params.set("noteNumber", noteNumber);
+    return `?${params.toString()}`;
+  }
+  if (date) {
     params.set("dateFilterType", "DAY");
     params.set("date", date);
   }
-  if (activeFilter === "noteNumber" && noteNumber) params.set("noteNumber", noteNumber);
+  if (customerName) params.set("customerName", customerName);
   return params.toString() ? `?${params.toString()}` : "";
 }
 
@@ -3362,7 +3500,8 @@ function findById(items, id) {
 function findCylinderByNumber(items, number) {
   const normalized = normalizeCylinderNumberKey(number);
   if (!normalized) return undefined;
-  return items.find((item) => normalizeCylinderNumberKey(item.serialNumber) === normalized || String(item.id) === normalized);
+  // Solo por número de serie: comparar con el id interno hacía que "77" tomara el cilindro con id 77.
+  return items.find((item) => normalizeCylinderNumberKey(item.serialNumber) === normalized);
 }
 
 function saleCylinderOwnerName(cylinder) {
@@ -3536,9 +3675,9 @@ function drawSaleNotePage(page, note, pageRows, allRows, pageIndex, regularFont,
   const black = rgb(0, 0, 0);
   const red = rgb(1, 0, 0);
   const white = rgb(1, 1, 1);
-  const deliveredCount = (note.deliveredCylinders || []).length;
-  const collectedCount = (note.collectedCylinders || []).length;
 
+  coverPdfText(page, 343, 591.2, 198, 48.5, white);
+  drawSaleNoteTableHeader(page, boldFont, black, white);
   coverPdfText(page, 474.2, 651.5, 66, 18, white);
   drawPdfText(page, formatSaleNoteNumberForPdf(note.noteNumber), 475.9, 655.9, {
     font: boldFont,
@@ -3557,21 +3696,6 @@ function drawSaleNotePage(page, note, pageRows, allRows, pageIndex, regularFont,
     size: 8.76,
     color: black,
     maxWidth: 200
-  });
-  drawCenteredPdfText(page, String(allRows.length), 372, 601.06, 22, {
-    font: regularFont,
-    size: 8.76,
-    color: black
-  });
-  drawCenteredPdfText(page, String(deliveredCount), 437.5, 601.06, 22, {
-    font: regularFont,
-    size: 8.76,
-    color: black
-  });
-  drawCenteredPdfText(page, String(collectedCount), 505.18, 601.06, 22, {
-    font: regularFont,
-    size: 8.76,
-    color: black
   });
 
   pageRows.forEach((line, index) => drawSaleNotePdfRow(
@@ -3592,17 +3716,40 @@ function drawSaleNotePage(page, note, pageRows, allRows, pageIndex, regularFont,
   });
 }
 
+const SALE_NOTE_PDF_COLUMNS = [
+  { key: "number", header: "No.", x: 73, width: 24 },
+  { key: "serialNumber", header: "NUMERO DE SERIE", x: 97, width: 68 },
+  { key: "capacityM3", header: "CAP. (M3)", x: 165, width: 43 },
+  { key: "gasType", header: "TIPO DE GAS", x: 208, width: 75 },
+  { key: "ownerName", header: "PROPIETARIO", x: 283, width: 62 },
+  { key: "status", header: "ESTADO", x: 345, width: 61 },
+  { key: "amount", header: "MONTO EN BS.", x: 406, width: 60 },
+  { key: "observations", header: "OBSERVACIONES", x: 466, width: 74 }
+];
+
+function drawSaleNoteTableHeader(page, font, color, background) {
+  coverPdfText(page, 72, 560.3, 467.5, 21.7, background);
+  SALE_NOTE_PDF_COLUMNS.forEach((column) => {
+    drawCenteredPdfText(page, column.header, column.x, 569.02, column.width, {
+      font,
+      size: 7.44,
+      color
+    });
+  });
+}
+
 function drawSaleNotePdfRow(page, line, index, rowNumber, font, color) {
   const y = 551.47 - index * 12;
   const detailY = y - 1.44;
+  const values = { ...line, number: String(rowNumber) };
 
-  drawPdfText(page, String(rowNumber), rowNumber < 10 ? 83.4 : 81.48, y, { font, size: 7.44, color, maxWidth: 18 });
-  drawPdfText(page, line.serialNumber, 130.1, y, { font, size: 7.44, color, maxWidth: 70 });
-  drawPdfText(page, line.capacityM3, 220.01, y, { font, size: 7.44, color, maxWidth: 34 });
-  drawPdfText(page, line.ownerName, 286.13, detailY, { font, size: 7.44, color, maxWidth: 62 });
-  drawPdfText(page, line.status, 360.67, detailY, { font, size: 7.44, color, maxWidth: 52 });
-  drawPdfText(page, line.amount, 438.22, detailY, { font, size: 7.44, color, maxWidth: 38 });
-  drawPdfText(page, line.observations, 495.22, detailY, { font, size: 7.44, color, maxWidth: 42 });
+  SALE_NOTE_PDF_COLUMNS.forEach((column) => {
+    drawCenteredPdfText(page, values[column.key], column.x, ["number", "serialNumber", "capacityM3"].includes(column.key) ? y : detailY, column.width - 4, {
+      font,
+      size: 7.44,
+      color
+    });
+  });
 }
 
 function saleNotePdfRows(note) {
@@ -3615,6 +3762,7 @@ function saleNotePdfRow(line, status) {
   return {
     serialNumber: String(line.serialNumber || line.cylinderId || ""),
     capacityM3: formatCapacity(line.capacityM3),
+    gasType: line.productName || "",
     ownerName: line.ownerName || "",
     status,
     amount: line.amount ? formatMoneyPlain(line.amount) : "",
@@ -3711,11 +3859,16 @@ async function api(path, options = {}) {
   if (session?.accessToken) {
     headers.Authorization = `Bearer ${session.accessToken}`;
   }
-  const response = await fetch(path, {
-    method: options.method || "GET",
-    headers: Object.keys(headers).length ? headers : undefined,
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
+  let response;
+  try {
+    response = await fetch(path, {
+      method: options.method || "GET",
+      headers: Object.keys(headers).length ? headers : undefined,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+  } catch {
+    throw new Error("No se pudo conectar con el servidor. Verifica tu conexion e intenta nuevamente.");
+  }
   if (!response.ok) {
     const text = await response.text();
     const error = new Error(readErrorMessage(text, response.status));
@@ -3796,12 +3949,24 @@ function readLastActivityAt() {
 function readErrorMessage(text, status) {
   if (status === 401) return "Sesion expirada o no autenticada. Ingresa nuevamente.";
   if (status === 403) return "No tienes permiso para realizar esta accion.";
+  if (status >= 500 && !isJsonBody(text)) {
+    return "No se pudo conectar con el servidor. Verifica que el backend este iniciado e intenta nuevamente.";
+  }
   if (!text) return `Error ${status}`;
   try {
     const parsed = JSON.parse(text);
     return parsed.error || parsed.message || `Error ${status}`;
   } catch {
     return `Error ${status}`;
+  }
+}
+
+function isJsonBody(text) {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -3993,6 +4158,15 @@ function formatSaleNoteDateForPdf(value) {
   const [date = "", time = ""] = String(value).split("T");
   const [year, month, day] = date.split("-");
   return [day, month, year].every(Boolean) ? `${day}/${month}/${year} ${time.slice(0, 5)}`.trim() : formatDateTime(value);
+}
+
+// Al crear una nota, la utilidad es la suma de los precios asignados a los cilindros entregados.
+// Al editar una nota existente el formulario no carga los cilindros, así que se conserva el valor guardado.
+function saleUtilityAmount(form) {
+  if (form.id) return moneyInputValue(form.utilityAmount);
+  if (form.noteType === "RECEPCION") return 0;
+  const total = (form.deliveredCylinders || []).reduce((sum, line) => sum + (Number(line.amount) || 0), 0);
+  return Math.round(total * 100) / 100;
 }
 
 function moneyInputValue(value) {

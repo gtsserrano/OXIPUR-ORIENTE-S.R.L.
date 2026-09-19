@@ -1,18 +1,18 @@
 :root {
-  --ink: #122033;
+  --ink: #0e1b2f;
   --muted: #64748b;
-  --line: #d7e5ef;
+  --line: #d0d9e4;
   --panel: rgba(255, 255, 255, 0.92);
-  --panel-soft: #f6fbff;
-  --accent: #11a6c8;
-  --accent-strong: #078db1;
-  --sidebar: #08313d;
-  --sidebar-2: #0d4451;
+  --panel-soft: #f6f8fb;
+  --accent: #2a4c86;
+  --accent-strong: #1a3868;
+  --sidebar: #0b1d3a;
+  --sidebar-2: #13294d;
   --success: #18a957;
-  --shadow: 0 14px 34px rgba(29, 67, 88, 0.09);
+  --shadow: 0 14px 34px rgba(15, 32, 64, 0.09);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--ink);
-  background: #eef6fb;
+  background: #eef2f7;
 }
 
 * {
@@ -56,8 +56,8 @@ button {
   grid-template-columns: 280px minmax(0, 1fr);
   overflow: hidden;
   background:
-    radial-gradient(circle at 84% 8%, rgba(17, 166, 200, 0.16), transparent 24rem),
-    linear-gradient(120deg, #f8fbfd 0%, #eef6fb 55%, #e8f3f8 100%);
+    radial-gradient(circle at 84% 8%, rgba(30, 61, 112, 0.16), transparent 24rem),
+    linear-gradient(120deg, #f7f9fb 0%, #eef2f7 55%, #e9eef4 100%);
 }
 
 .loginShell {
@@ -67,14 +67,14 @@ button {
   padding: 44px;
   align-items: center;
   background:
-    radial-gradient(circle at 85% 12%, rgba(17, 166, 200, 0.18), transparent 24rem),
-    linear-gradient(120deg, #f8fbfd 0%, #eef6fb 55%, #e8f3f8 100%);
+    radial-gradient(circle at 85% 12%, rgba(30, 61, 112, 0.18), transparent 24rem),
+    linear-gradient(120deg, #f7f9fb 0%, #eef2f7 55%, #e9eef4 100%);
 }
 
 .loginPanel {
   width: min(100%, 460px);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: var(--shadow);
   padding: 30px;
@@ -113,7 +113,7 @@ button {
 }
 
 .loginIntro span {
-  color: #007ca0;
+  color: #1a3868;
   font-weight: 700;
   font-size: 14px;
 }
@@ -147,7 +147,7 @@ button {
 
 .loginError {
   border: 1px solid #fac3c3;
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 12px 14px;
   background: #fff0f0;
   color: #8a1f1f;
@@ -165,8 +165,8 @@ button {
   padding: 30px 16px 22px;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, var(--sidebar), #082b35);
-  color: #d8edf4;
+  background: linear-gradient(180deg, var(--sidebar), #081630);
+  color: #dbe2ec;
   box-shadow: inset -1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -180,13 +180,13 @@ button {
 
 .sidebar::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
-  border-radius: 999px;
-  background: rgba(179, 204, 213, 0.42);
+  border-radius: 3px;
+  background: rgba(182, 194, 212, 0.42);
   background-clip: content-box;
 }
 
 .sidebar::-webkit-scrollbar-thumb:hover {
-  background: rgba(216, 237, 244, 0.56);
+  background: rgba(219, 227, 238, 0.56);
   background-clip: content-box;
 }
 
@@ -195,16 +195,16 @@ button {
   align-items: center;
   gap: 12px;
   padding: 2px 10px 24px;
-  border-bottom: 1px solid rgba(216, 237, 244, 0.14);
+  border-bottom: 1px solid rgba(219, 227, 238, 0.14);
 }
 
 .brandMark {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: 3px;
   display: grid;
   place-items: center;
-  background: linear-gradient(145deg, #2fc7e8, #0596b6);
+  background: linear-gradient(145deg, #cbd3de, #17325f);
   color: #ffffff;
   font-weight: 650;
   font-size: 16px;
@@ -214,7 +214,7 @@ button {
   width: 74px;
   height: 54px;
   flex: 0 0 auto;
-  border-radius: 8px;
+  border-radius: 3px;
   object-fit: contain;
   background: #ffffff;
   padding: 6px;
@@ -233,7 +233,7 @@ button {
 .brand span,
 .sidebarFoot span {
   display: block;
-  color: #b3ccd5;
+  color: #b6c2d4;
   margin-top: 5px;
   font-size: 14px;
 }
@@ -248,13 +248,13 @@ button {
   width: 100%;
   height: 44px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 3px;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 0 10px;
   background: transparent;
-  color: #d6e8ee;
+  color: #dbe3ee;
   font-weight: 500;
   font-size: 16px;
   text-align: left;
@@ -266,8 +266,8 @@ button {
 }
 
 .navItem.active .navDot {
-  background: #2ad3f1;
-  box-shadow: 0 0 0 7px rgba(42, 211, 241, 0.1);
+  background: #c3ccd8;
+  box-shadow: 0 0 0 7px rgba(195, 204, 216, 0.1);
 }
 
 .navGroup {
@@ -287,12 +287,12 @@ button {
 .navChevron {
   flex: 0 0 auto;
   margin-left: auto;
-  color: #9fc7d4;
+  color: #98a8bd;
   transition: transform 180ms ease, color 180ms ease;
 }
 
 .navChevron.open {
-  color: #d8edf4;
+  color: #dbe2ec;
   transform: rotate(180deg);
 }
 
@@ -317,13 +317,13 @@ button {
   width: 100%;
   min-height: 36px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 3px;
   display: flex;
   align-items: center;
   gap: 9px;
   padding: 0 10px 0 8px;
   background: transparent;
-  color: #c2dbe4;
+  color: #bcc8d6;
   font-size: 14px;
   font-weight: 550;
   text-align: left;
@@ -339,16 +339,16 @@ button {
   width: 8px;
   height: 8px;
   flex: 0 0 auto;
-  border: 1.5px solid rgba(194, 219, 228, 0.7);
+  border: 1.5px solid rgba(188, 200, 214, 0.7);
   border-radius: 50%;
-  background: rgba(8, 49, 61, 0.7);
-  box-shadow: 0 0 0 4px rgba(42, 211, 241, 0.06);
+  background: rgba(11, 29, 58, 0.7);
+  box-shadow: 0 0 0 4px rgba(195, 204, 216, 0.06);
 }
 
 .navChild.active .navBranchLine {
-  border-color: #2ad3f1;
-  background: #2ad3f1;
-  box-shadow: 0 0 0 5px rgba(42, 211, 241, 0.12);
+  border-color: #c3ccd8;
+  background: #c3ccd8;
+  box-shadow: 0 0 0 5px rgba(195, 204, 216, 0.12);
 }
 
 .navDot {
@@ -356,15 +356,15 @@ button {
   height: 10px;
   border-radius: 50%;
   flex: 0 0 auto;
-  background: #6d97a5;
-  box-shadow: 0 0 0 6px rgba(109, 151, 165, 0.1);
+  background: #6d7f9a;
+  box-shadow: 0 0 0 6px rgba(100, 118, 145, 0.1);
 }
 
 .sidebarFoot {
   margin-top: auto;
   padding: 16px 14px;
-  border: 1px solid rgba(216, 237, 244, 0.18);
-  border-radius: 8px;
+  border: 1px solid rgba(219, 227, 238, 0.18);
+  border-radius: 3px;
   background: rgba(255, 255, 255, 0.07);
 }
 
@@ -415,21 +415,21 @@ button {
   min-width: 40px;
   height: 40px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   padding: 0 12px;
   color: #5b6f8a;
-  background: #fbfdff;
+  background: #fafbfd;
 }
 
 .profileMenuButton:hover,
 .profileMenuButton[aria-expanded="true"] {
   color: var(--ink);
-  border-color: #b9d6e5;
-  background: #f2f8fb;
+  border-color: #b3bfcf;
+  background: #f0f3f8;
 }
 
 .onlineDot {
@@ -457,7 +457,7 @@ button {
   z-index: 100;
   width: 270px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 16px;
   background: #ffffff;
   box-shadow: var(--shadow);
@@ -566,7 +566,7 @@ button {
 .logout {
   height: 40px;
   border: 1px solid #efc2c2;
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 0 18px;
   background: #f8dddd;
   color: #842b2b;
@@ -589,7 +589,7 @@ button {
 }
 
 .pageIntro span {
-  color: #007ca0;
+  color: #1a3868;
   font-weight: 600;
   font-size: 14px;
 }
@@ -617,7 +617,7 @@ button {
 .metricCard,
 .card {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: var(--shadow);
 }
@@ -635,7 +635,7 @@ button {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #dff5fb;
+  background: #e3e9f1;
   color: var(--accent-strong);
 }
 
@@ -706,8 +706,8 @@ button {
 .inlineSearch input {
   min-width: 0;
   height: 44px;
-  border: 1px solid #d4e4ef;
-  border-radius: 8px;
+  border: 1px solid #cfd8e3;
+  border-radius: 3px;
   padding: 0 16px;
   background: #ffffff;
   color: var(--ink);
@@ -775,7 +775,7 @@ button {
 .field input:disabled,
 .field select:disabled {
   color: #93a4b5;
-  background: #f2f6f9;
+  background: #f0f3f7;
   cursor: not-allowed;
   opacity: 0.78;
 }
@@ -791,14 +791,14 @@ button {
   align-items: center;
   gap: 6px;
   border: 1px solid;
-  border-radius: 7px;
+  border-radius: 3px;
   padding: 6px 9px;
   font-size: 12px;
   font-weight: 650;
   line-height: 1.25;
   pointer-events: none;
   transform: translateY(-100%);
-  box-shadow: 0 10px 22px rgba(29, 67, 88, 0.12);
+  box-shadow: 0 10px 22px rgba(15, 32, 64, 0.12);
 }
 
 .floatingHintField input {
@@ -819,34 +819,34 @@ button {
 .secondaryBtn {
   min-height: 42px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 0 18px;
   color: #ffffff;
-  background: #0b9fc1;
+  background: #1e3d70;
   font-weight: 600;
   font-size: 15px;
 }
 
 .secondaryBtn {
-  background: #edf6fa;
-  color: #164153;
+  background: #e9eef5;
+  color: #132a4d;
 }
 
 .addLineBtn {
   min-height: 42px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 0 18px;
   color: #ffffff;
-  background: linear-gradient(135deg, #078db1, #18a957);
-  box-shadow: 0 10px 22px rgba(7, 141, 177, 0.22);
+  background: linear-gradient(135deg, #1a3868, #18a957);
+  box-shadow: 0 10px 22px rgba(26, 56, 104, 0.22);
   font-size: 15px;
   font-weight: 750;
 }
 
 .addLineBtn:hover {
-  background: linear-gradient(135deg, #067f9f, #14964e);
-  box-shadow: 0 12px 26px rgba(7, 141, 177, 0.28);
+  background: linear-gradient(135deg, #152f59, #14964e);
+  box-shadow: 0 12px 26px rgba(26, 56, 104, 0.28);
 }
 
 .actionBar,
@@ -870,7 +870,7 @@ button {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(8, 49, 61, 0.34);
+  background: rgba(11, 29, 58, 0.34);
   backdrop-filter: blur(4px);
   animation: modalOverlayIn 180ms ease both;
 }
@@ -888,10 +888,10 @@ button {
   max-height: min(760px, calc(100vh - 48px));
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 24px;
   background: #ffffff;
-  box-shadow: 0 24px 70px rgba(8, 49, 61, 0.2);
+  box-shadow: 0 24px 70px rgba(11, 29, 58, 0.2);
   animation: modalPanelIn 180ms ease both;
 }
 
@@ -939,14 +939,14 @@ button {
 
 .missingCylinderQuestion {
   margin: 18px 0;
-  color: #36576a;
+  color: #33496a;
   line-height: 1.55;
 }
 
 .missingCylinderPreview {
   padding: 16px;
   border: 1px solid #e4d7af;
-  border-radius: 8px;
+  border-radius: 3px;
   background: #fffdf5;
 }
 
@@ -1013,10 +1013,10 @@ button {
   max-height: min(760px, calc(100vh - 48px));
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 24px;
   background: #ffffff;
-  box-shadow: 0 24px 70px rgba(8, 49, 61, 0.2);
+  box-shadow: 0 24px 70px rgba(11, 29, 58, 0.2);
   animation: modalPanelIn 180ms ease both;
 }
 
@@ -1048,14 +1048,14 @@ button {
   height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 8px;
-  background: #eaf7fb;
+  border-radius: 3px;
+  background: #e9eef5;
   color: var(--accent-strong);
 }
 
 .logoutConfirmHeader span {
   display: block;
-  color: #007ca0;
+  color: #1a3868;
   font-size: 12px;
   font-weight: 800;
 }
@@ -1069,7 +1069,7 @@ button {
 
 .logoutConfirmModal p {
   margin: 18px 0 0;
-  color: #53677f;
+  color: #55657d;
   font-size: 15px;
   line-height: 1.5;
 }
@@ -1109,7 +1109,7 @@ button {
 }
 
 .modalHeader span {
-  color: #007ca0;
+  color: #1a3868;
   font-size: 13px;
   font-weight: 700;
 }
@@ -1126,8 +1126,8 @@ button {
 
 .lineSection {
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f8fcfe;
+  border-radius: 3px;
+  background: #f6f8fb;
   padding: 16px;
   margin-bottom: 18px;
 }
@@ -1187,8 +1187,8 @@ button {
 
 .readonlyInfo {
   min-height: 44px;
-  border: 1px solid #d4e4ef;
-  border-radius: 8px;
+  border: 1px solid #cfd8e3;
+  border-radius: 3px;
   padding: 7px 12px;
   background: #ffffff;
 }
@@ -1304,8 +1304,8 @@ button {
   justify-items: start;
   text-align: left;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #f8fcfe;
+  border-radius: 4px;
+  background: #f6f8fb;
   padding: 20px;
   color: var(--ink);
   cursor: pointer;
@@ -1327,8 +1327,8 @@ button {
 
 .saleTypeOption:hover {
   border-color: var(--accent);
-  background: #edf9fc;
-  box-shadow: 0 8px 18px rgba(7, 141, 177, 0.14);
+  background: #eef2f7;
+  box-shadow: 0 8px 18px rgba(26, 56, 104, 0.14);
 }
 
 .saleTypeBadge {
@@ -1337,8 +1337,8 @@ button {
   justify-content: space-between;
   gap: 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f2f9fc;
+  border-radius: 3px;
+  background: #f0f3f8;
   padding: 10px 16px;
   margin-bottom: 18px;
 }
@@ -1355,8 +1355,8 @@ button {
 
 .salePreview {
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f8fcfe;
+  border-radius: 3px;
+  background: #f6f8fb;
   padding: 18px;
   margin-top: 20px;
   display: grid;
@@ -1375,8 +1375,8 @@ button {
 }
 
 .previewBlock {
-  border: 1px solid #d4e4ef;
-  border-radius: 8px;
+  border: 1px solid #cfd8e3;
+  border-radius: 3px;
   background: #ffffff;
   padding: 12px;
 }
@@ -1411,7 +1411,7 @@ button {
 
 .previewSection h4 {
   margin: 8px 0 0;
-  color: #0e5d73;
+  color: #17305a;
 }
 
 .previewSection table {
@@ -1471,7 +1471,7 @@ button {
   gap: 14px;
   padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: var(--panel-soft);
 }
 
@@ -1479,7 +1479,7 @@ button {
   width: 44px;
   height: 44px;
   flex: 0 0 auto;
-  border-radius: 8px;
+  border-radius: 3px;
   display: grid;
   place-items: center;
   color: #ffffff;
@@ -1505,10 +1505,10 @@ button {
 
 .excelColumns span {
   padding: 7px 10px;
-  border: 1px solid #cfe1ec;
-  border-radius: 999px;
-  color: #35516d;
-  background: #f7fbfe;
+  border: 1px solid #c6d0dd;
+  border-radius: 3px;
+  color: #33496a;
+  background: #f6f8fb;
   font-size: 13px;
   font-weight: 600;
 }
@@ -1528,11 +1528,11 @@ button {
 .iconBtn {
   width: 36px;
   height: 36px;
-  border: 1px solid #d4e4ef;
-  border-radius: 8px;
+  border: 1px solid #cfd8e3;
+  border-radius: 3px;
   display: inline-grid;
   place-items: center;
-  color: #164153;
+  color: #132a4d;
   background: #ffffff;
 }
 
@@ -1543,22 +1543,22 @@ button {
 
 .tableLinkButton {
   min-height: 34px;
-  border: 1px solid #b9d6e5;
-  border-radius: 8px;
+  border: 1px solid #b3bfcf;
+  border-radius: 3px;
   padding: 0 12px;
-  color: #0e5d73;
-  background: #f2f9fc;
+  color: #17305a;
+  background: #f0f3f8;
   font-weight: 750;
 }
 
 .tableLinkButton:hover {
-  border-color: #0b9fc1;
-  background: #e3f6fb;
+  border-color: #1e3d70;
+  background: #e6ebf2;
 }
 
 .notice {
   border: 1px solid #f2d38f;
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 14px 16px;
   margin-bottom: 16px;
   background: #fff7df;
@@ -1580,7 +1580,7 @@ button {
   display: inline-flex;
   align-items: center;
   min-height: 26px;
-  border-radius: 999px;
+  border-radius: 3px;
   padding: 0 10px;
   color: #8a1f1f;
   background: #ffe5e5;
@@ -1592,7 +1592,7 @@ button {
   display: inline-flex;
   align-items: center;
   min-height: 26px;
-  border-radius: 999px;
+  border-radius: 3px;
   padding: 0 10px;
   font-weight: 700;
 }
@@ -1604,7 +1604,7 @@ button {
 
 .offlineBadge {
   color: #5b6f8a;
-  background: #edf3f7;
+  background: #ebeff4;
 }
 
 .tableActionBar {
@@ -1624,10 +1624,10 @@ button {
   justify-content: space-between;
   gap: 18px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 16px;
   margin-bottom: 18px;
-  background: #f8fcff;
+  background: #f6f8fb;
 }
 
 .printingSearch {
@@ -1638,7 +1638,7 @@ button {
   margin-bottom: 18px;
   padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: #ffffff;
 }
 
@@ -1648,11 +1648,11 @@ button {
 }
 
 .filterGuide {
-  border: 1px solid #b9dceb;
-  border-radius: 12px;
+  border: 1px solid #b3bfcf;
+  border-radius: 4px;
   padding: 16px 18px;
   margin-bottom: 16px;
-  background: linear-gradient(135deg, #f1fafd 0%, #ffffff 100%);
+  background: linear-gradient(135deg, #f1f4f9 0%, #ffffff 100%);
 }
 
 .filterGuideHeader {
@@ -1689,7 +1689,7 @@ button {
   align-items: flex-start;
   gap: 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 4px;
   padding: 12px 14px;
   background: #ffffff;
   color: var(--accent-strong);
@@ -1719,16 +1719,16 @@ button {
 
 .filterGuideOption.active {
   border-color: var(--accent);
-  background: #e9f7fb;
-  box-shadow: 0 0 0 3px rgba(17, 166, 200, 0.14);
+  background: #e9eef5;
+  box-shadow: 0 0 0 3px rgba(30, 61, 112, 0.14);
 }
 
 .filterGuideStatus {
   margin: 12px 0 0;
   padding: 8px 12px;
-  border-radius: 8px;
-  background: #dff3f9;
-  color: #0b5a70;
+  border-radius: 3px;
+  background: #e3e9f1;
+  color: #17305a;
   font-size: 13px;
   font-weight: 650;
 }
@@ -1749,8 +1749,8 @@ button {
   margin-bottom: 18px;
   padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f8fcff;
+  border-radius: 3px;
+  background: #f6f8fb;
 }
 
 .auditToolbar strong,
@@ -1774,18 +1774,18 @@ button {
   grid-template-columns: 150px minmax(0, 1fr) auto;
   align-items: stretch;
   overflow: hidden;
-  border: 1px solid #d4e4ef;
-  border-radius: 10px;
+  border: 1px solid #cfd8e3;
+  border-radius: 4px;
   background: #ffffff;
-  box-shadow: 0 4px 14px rgba(8, 49, 61, 0.05);
+  box-shadow: 0 4px 14px rgba(11, 29, 58, 0.05);
   cursor: pointer;
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .auditEventCard:hover,
 .auditEventCard:focus-visible {
-  border-color: #86cadd;
-  box-shadow: 0 9px 24px rgba(8, 49, 61, 0.11);
+  border-color: #7f93b0;
+  box-shadow: 0 9px 24px rgba(11, 29, 58, 0.11);
   outline: none;
   transform: translateY(-1px);
 }
@@ -1797,9 +1797,9 @@ button {
   flex-direction: column;
   gap: 5px;
   padding: 18px 14px;
-  border-right: 1px solid #d9e8f1;
-  color: #0e5d73;
-  background: #f1f8fc;
+  border-right: 1px solid #d3dbe6;
+  color: #17305a;
+  background: #f1f4f9;
   text-align: center;
 }
 
@@ -1835,7 +1835,7 @@ button {
 .auditActor {
   min-width: 0;
   gap: 7px;
-  color: #0e5d73;
+  color: #17305a;
 }
 
 .auditActor span {
@@ -1854,7 +1854,7 @@ button {
 .auditEventSummary {
   display: block;
   margin-top: 11px;
-  color: #173a4c;
+  color: #15294a;
   font-size: 16px;
   line-height: 1.35;
 }
@@ -1868,7 +1868,7 @@ button {
 }
 
 .auditEventMeta b {
-  color: #4a6575;
+  color: #4f6079;
 }
 
 .auditOpenButton {
@@ -1880,27 +1880,27 @@ button {
   align-self: center;
   min-height: 40px;
   margin: 16px;
-  border: 1px solid #a9d3e2;
-  border-radius: 8px;
+  border: 1px solid #a3b1c3;
+  border-radius: 3px;
   padding: 0 14px;
-  color: #0e5d73;
-  background: #f2f9fc;
+  color: #17305a;
+  background: #f0f3f8;
   font-weight: 800;
 }
 
 .auditOpenButton:hover {
-  border-color: #0b9fc1;
-  background: #e3f6fb;
+  border-color: #1e3d70;
+  background: #e6ebf2;
 }
 
 .auditActionBadge {
   display: inline-flex;
   align-items: center;
   min-height: 26px;
-  border-radius: 999px;
+  border-radius: 3px;
   padding: 0 10px;
-  color: #075d75;
-  background: #e3f6fb;
+  color: #132a50;
+  background: #e6ebf2;
   font-size: 12px;
   font-weight: 800;
 }
@@ -1913,8 +1913,8 @@ button {
 .auditActionBadge.login,
 .auditActionBadge.view,
 .auditActionBadge.search {
-  color: #075d75;
-  background: #e3f6fb;
+  color: #132a50;
+  background: #e6ebf2;
 }
 
 .auditActionBadge.print,
@@ -1941,7 +1941,7 @@ button {
 
 .auditActionBadge.logout {
   color: #46515a;
-  background: #e9eef1;
+  background: #e9edf2;
 }
 
 .auditPagination {
@@ -1973,17 +1973,17 @@ button {
 
 .auditChangeItem {
   overflow: hidden;
-  border: 1px solid #d4e4ef;
-  border-radius: 9px;
+  border: 1px solid #cfd8e3;
+  border-radius: 3px;
   background: #ffffff;
 }
 
 .auditChangeField {
   display: block;
   padding: 10px 14px;
-  border-bottom: 1px solid #d9e8f1;
-  color: #174b60;
-  background: #eef6fb;
+  border-bottom: 1px solid #d3dbe6;
+  color: #1a3560;
+  background: #eef2f7;
   font-size: 13px;
 }
 
@@ -1998,7 +1998,7 @@ button {
 }
 
 .auditChangeComparison > div + div {
-  border-left: 1px solid #d9e8f1;
+  border-left: 1px solid #d3dbe6;
 }
 
 .auditChangeComparison span {
@@ -2026,7 +2026,7 @@ button {
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: #294a5c;
+  color: #22385b;
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
   line-height: 1.45;
@@ -2064,7 +2064,7 @@ button {
 .printSelect span {
   width: 18px;
   height: 18px;
-  border: 2px solid #9fb9c8;
+  border: 2px solid #98a8bd;
   border-radius: 50%;
   background: #ffffff;
   box-shadow: inset 0 0 0 4px #ffffff;
@@ -2088,13 +2088,13 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #0e5d73;
+  color: #17305a;
 }
 
 .tableWrap {
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
 }
 
 table {
@@ -2105,7 +2105,7 @@ table {
 }
 
 th {
-  background: #eef6fb;
+  background: #eef2f7;
   color: #41536b;
   text-align: left;
   font-size: 14px;
@@ -2141,7 +2141,7 @@ td {
 .compactTableHeader {
   height: 36px;
   min-height: 36px;
-  background: #eef6fb;
+  background: #eef2f7;
   color: #41536b;
   font-size: 14px;
   font-weight: 650;
@@ -2176,19 +2176,19 @@ tr:last-child td {
 
 .clickableTableRow:hover,
 .clickableTableRow:focus-visible {
-  background: #f0f9fc;
+  background: #eff3f8;
   outline: none;
-  box-shadow: inset 3px 0 0 #0b9fc1;
+  box-shadow: inset 3px 0 0 #1e3d70;
 }
 
 .clickableTableRow:focus-visible td {
-  border-color: #b9d6e5;
+  border-color: #b3bfcf;
 }
 
 .statusRow {
   min-height: 108px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: var(--panel-soft);
   padding: 20px 16px;
   display: grid;
@@ -2211,7 +2211,7 @@ tr:last-child td {
 
 .statusRow em {
   padding: 8px 12px;
-  border-radius: 999px;
+  border-radius: 3px;
   background: #d9f8e5;
   color: #146333;
   font-style: normal;
@@ -2238,9 +2238,9 @@ tr:last-child td {
 .clientStats > div {
   min-height: 78px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 14px 16px;
-  background: #f8fcff;
+  background: #f6f8fb;
 }
 
 .clientsToolbar span,
@@ -2272,7 +2272,7 @@ tr:last-child td {
 .clientListPanel,
 .clientDetailPanel {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: #ffffff;
 }
 
@@ -2288,17 +2288,17 @@ tr:last-child td {
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid var(--line);
-  background: #eef6fb;
+  background: #eef2f7;
 }
 
 .clientListHeader span {
   min-width: 30px;
   min-height: 30px;
-  border-radius: 999px;
+  border-radius: 3px;
   display: inline-grid;
   place-items: center;
-  color: #0e5d73;
-  background: #dff5fb;
+  color: #17305a;
+  background: #e3e9f1;
   font-weight: 750;
 }
 
@@ -2334,7 +2334,7 @@ tr:last-child td {
 
 .clientListButton:hover,
 .clientListButton.active {
-  background: #f0f9fc;
+  background: #eff3f8;
 }
 
 .clientListButton strong,
@@ -2359,36 +2359,36 @@ tr:last-child td {
 .clientListButton b {
   min-width: 34px;
   min-height: 34px;
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 0 10px;
   display: inline-grid;
   place-items: center;
   color: #ffffff;
-  background: #0b9fc1;
+  background: #1e3d70;
   font-weight: 750;
   white-space: nowrap;
 }
 
 .inventoryListButton b {
-  background: #164153;
+  background: #132a4d;
 }
 
 .clientOpenIcon {
   width: 34px;
   height: 34px;
-  border: 1px solid #d4e4ef;
-  border-radius: 8px;
+  border: 1px solid #cfd8e3;
+  border-radius: 3px;
   display: inline-grid;
   place-items: center;
   justify-self: end;
-  color: #164153;
+  color: #132a4d;
   background: #ffffff;
 }
 
 .clientListButton:hover .clientOpenIcon {
-  border-color: #0b9fc1;
-  color: #0e5d73;
-  background: #e3f6fb;
+  border-color: #1e3d70;
+  color: #17305a;
+  background: #e6ebf2;
 }
 
 .clientListButton .iconBtn {
@@ -2416,7 +2416,7 @@ tr:last-child td {
 
 .clientDetailHeader > strong {
   min-height: 34px;
-  border-radius: 999px;
+  border-radius: 3px;
   padding: 7px 12px;
   color: #146333;
   background: #d9f8e5;
@@ -2444,9 +2444,9 @@ tr:last-child td {
 .detailGrid div,
 .detailNote {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 14px 16px;
-  background: #f8fcff;
+  background: #f6f8fb;
 }
 
 .detailGrid span,
@@ -2482,9 +2482,9 @@ tr:last-child td {
 
 .customerSummary > div:not(.tableWrap) {
   padding: 16px;
-  border-radius: 8px;
+  border-radius: 3px;
   border: 1px solid var(--line);
-  background: #f7fbfe;
+  background: #f6f8fb;
 }
 
 .customerSummary span,
@@ -2511,9 +2511,9 @@ tr:last-child td {
 
 .emptyState {
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 22px;
-  background: #fbfdff;
+  background: #fafbfd;
 }
 
 .emptyState span {
@@ -2521,7 +2521,7 @@ tr:last-child td {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: linear-gradient(145deg, #2fc7e8, #0794b3);
+  background: linear-gradient(145deg, #cbd3de, #1e3d70);
   margin-bottom: 14px;
 }
 
@@ -2540,9 +2540,9 @@ tr:last-child td {
   right: 32px;
   z-index: 10;
   max-width: 420px;
-  border-radius: 8px;
+  border-radius: 3px;
   padding: 14px 18px;
-  color: #08313d;
+  color: #0b1d3a;
   background: #dff8ee;
   border: 1px solid #b6edd5;
   font-weight: 550;
@@ -2557,8 +2557,8 @@ tr:last-child td {
 
 .skeletonGrid div {
   height: 180px;
-  border-radius: 8px;
-  background: linear-gradient(90deg, #f7fbfd, #eaf3f8, #f7fbfd);
+  border-radius: 3px;
+  background: linear-gradient(90deg, #f6f8fb, #e9eef4, #f6f8fb);
   background-size: 200% 100%;
   animation: pulse 1.4s linear infinite;
 }
@@ -2786,7 +2786,7 @@ tr:last-child td {
     justify-content: flex-start;
     flex-direction: row;
     border-right: 0;
-    border-bottom: 1px solid #d9e8f1;
+    border-bottom: 1px solid #d3dbe6;
     padding: 12px 14px;
     text-align: left;
   }
@@ -2805,7 +2805,7 @@ tr:last-child td {
   }
 
   .auditChangeComparison > div + div {
-    border-top: 1px solid #d9e8f1;
+    border-top: 1px solid #d3dbe6;
     border-left: 0;
   }
 
@@ -2861,4 +2861,433 @@ tr:last-child td {
     grid-template-columns: 1fr;
   }
 
+}
+
+/* ==========================================================================
+   TEMA "AZUL MARINO + PLATA"  (experimento visual, solo estilos)
+   --------------------------------------------------------------------------
+   Este archivo es una copia de styles.css con la paleta recoloreada, más
+   la capa de realces metálicos y animaciones de abajo.
+   Para volver al estilo anterior: en main.jsx cambiar
+       import "./styles.navy.css";   ->   import "./styles.css";
+   ========================================================================== */
+
+:root {
+  --navy-950: #081630;
+  --navy-900: #0b1d3a;
+  --navy-800: #13294d;
+  --navy-700: #1a3868;
+  --navy-600: #1e3d70;
+  --metal-light: #f4f6f9;
+  --metal-mid: #c3ccd8;
+  --metal-edge: #aab4c2;
+  --metal-dark: #7f8b9c;
+  --metal-gradient: linear-gradient(135deg, #f7f9fc 0%, #c9d1dc 28%, #eef1f5 50%, #aeb8c6 76%, #dfe4ea 100%);
+  --ease-out: cubic-bezier(0.22, 0.8, 0.28, 1);
+  --ease-in-out: cubic-bezier(0.45, 0, 0.2, 1);
+  --shadow: 0 12px 30px rgba(11, 29, 58, 0.09);
+}
+
+/* ---------- Fondos generales ---------- */
+.appShell,
+.loginShell {
+  background:
+    radial-gradient(circle at 88% 6%, rgba(30, 61, 112, 0.09), transparent 26rem),
+    linear-gradient(120deg, #ffffff 0%, #f3f6fa 55%, #e8edf3 100%);
+}
+
+/* ---------- Barra lateral: azul marino con canto metálico ---------- */
+.sidebar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 18%),
+    linear-gradient(180deg, var(--navy-900), var(--navy-950));
+  box-shadow: inset -1px 0 0 rgba(195, 204, 216, 0.55), 6px 0 22px rgba(8, 22, 48, 0.18);
+}
+
+.brandMark {
+  background: var(--metal-gradient);
+  color: var(--navy-900);
+  box-shadow: inset 0 1px 0 #ffffff, 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.brand {
+  border-bottom-color: rgba(195, 204, 216, 0.22);
+}
+
+.navItem,
+.navChild,
+.navParent {
+  position: relative;
+  transition:
+    background 220ms var(--ease-out),
+    color 220ms var(--ease-out),
+    transform 220ms var(--ease-out),
+    box-shadow 220ms var(--ease-out);
+}
+
+.navItem:hover,
+.navChild:hover {
+  transform: translateX(3px);
+}
+
+.navItem:active,
+.navChild:active {
+  transform: translateX(1px) scale(0.985);
+  transition-duration: 90ms;
+}
+
+.navItem:hover,
+.navItem.active {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.navItem.active,
+.navChild.active {
+  box-shadow: inset 3px 0 0 var(--metal-mid);
+}
+
+.navItem.active .navDot {
+  background: var(--metal-mid);
+  box-shadow: 0 0 0 7px rgba(195, 204, 216, 0.12);
+}
+
+.navDot {
+  transition: background 220ms var(--ease-out), box-shadow 220ms var(--ease-out);
+}
+
+/* ---------- Barra superior ---------- */
+.topbar {
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid transparent;
+  box-shadow: 0 1px 0 var(--metal-edge), 0 6px 18px rgba(11, 29, 58, 0.05);
+}
+
+.topbar h1 {
+  color: var(--navy-800);
+}
+
+/* ---------- Títulos ---------- */
+.pageIntro span,
+.loginIntro span {
+  color: var(--navy-700);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 12.5px;
+}
+
+.pageIntro h2,
+.loginIntro h1 {
+  color: var(--navy-900);
+}
+
+.card h3 {
+  color: var(--navy-800);
+}
+
+.card h3::after {
+  content: "";
+  display: block;
+  width: 46px;
+  height: 2px;
+  margin-top: 9px;
+  border-radius: 2px;
+  background: var(--metal-gradient);
+  box-shadow: 0 0 0 1px rgba(170, 180, 194, 0.35);
+}
+
+/* ---------- Tarjetas y paneles: borde plateado ---------- */
+.card,
+.metricCard,
+.loginPanel {
+  border-color: #cdd5e0;
+  box-shadow:
+    inset 0 2px 0 rgba(195, 204, 216, 0.75),
+    inset 0 3px 0 rgba(255, 255, 255, 0.9),
+    var(--shadow);
+  transition: box-shadow 260ms var(--ease-out), border-color 260ms var(--ease-out);
+}
+
+.metricCard:hover {
+  border-color: var(--metal-edge);
+  box-shadow:
+    inset 0 2px 0 var(--metal-mid),
+    inset 0 3px 0 rgba(255, 255, 255, 0.9),
+    0 16px 34px rgba(11, 29, 58, 0.14);
+}
+
+.metricIcon {
+  background: var(--metal-gradient);
+  color: var(--navy-800);
+  box-shadow: inset 0 1px 0 #ffffff, 0 1px 3px rgba(11, 29, 58, 0.2);
+}
+
+/* ---------- Botones ---------- */
+button,
+.iconBtn,
+.tableLinkButton,
+.auditOpenButton,
+.saleTypeOption,
+.profileMenuButton {
+  transition:
+    transform 180ms var(--ease-out),
+    box-shadow 180ms var(--ease-out),
+    background 200ms var(--ease-out),
+    border-color 200ms var(--ease-out),
+    color 200ms var(--ease-out),
+    filter 200ms var(--ease-out),
+    opacity 200ms var(--ease-out);
+}
+
+button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+button:not(:disabled):active {
+  transform: translateY(0) scale(0.975);
+  transition-duration: 80ms;
+}
+
+.primaryBtn {
+  background: linear-gradient(180deg, #2c5090 0%, #1e3d70 50%, #14295a 100%);
+  border: 1px solid #0f2347;
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 2px 6px rgba(11, 29, 58, 0.3);
+}
+
+.primaryBtn:not(:disabled):hover {
+  filter: brightness(1.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 8px 18px rgba(11, 29, 58, 0.34);
+}
+
+.primaryBtn:not(:disabled):active {
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.35);
+}
+
+.secondaryBtn {
+  background: linear-gradient(180deg, #ffffff 0%, #e4e9f0 100%);
+  border: 1px solid var(--metal-edge);
+  color: var(--navy-800);
+  box-shadow: inset 0 1px 0 #ffffff, 0 1px 3px rgba(11, 29, 58, 0.12);
+}
+
+.secondaryBtn:not(:disabled):hover {
+  border-color: var(--metal-dark);
+  box-shadow: inset 0 1px 0 #ffffff, 0 6px 14px rgba(11, 29, 58, 0.16);
+}
+
+.secondaryBtn:not(:disabled):active {
+  box-shadow: inset 0 2px 4px rgba(11, 29, 58, 0.18);
+}
+
+.addLineBtn {
+  background: linear-gradient(180deg, #3a5f9c 0%, #1e3d70 55%, #14295a 100%);
+  border: 1px solid #0f2347;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 4px 12px rgba(11, 29, 58, 0.28);
+}
+
+.addLineBtn:hover {
+  background: linear-gradient(180deg, #4a70ae 0%, #26487f 55%, #1a3268 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 10px 22px rgba(11, 29, 58, 0.34);
+}
+
+.iconBtn,
+.profileMenuButton {
+  border-color: var(--metal-edge);
+  background: linear-gradient(180deg, #ffffff 0%, #eaeef3 100%);
+  color: var(--navy-800);
+  box-shadow: inset 0 1px 0 #ffffff;
+}
+
+.iconBtn:not(:disabled):hover,
+.profileMenuButton:hover,
+.profileMenuButton[aria-expanded="true"] {
+  border-color: var(--navy-600);
+  color: var(--navy-900);
+  box-shadow: inset 0 1px 0 #ffffff, 0 6px 14px rgba(11, 29, 58, 0.16);
+}
+
+/* ---------- Campos de formulario ---------- */
+.field input,
+.field select,
+.inlineSearch input {
+  border-color: #c6d0dd;
+  transition: border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out), background 200ms var(--ease-out);
+}
+
+.field input:hover:not(:disabled),
+.field select:hover:not(:disabled) {
+  border-color: var(--metal-dark);
+}
+
+.field input:focus,
+.field select:focus,
+.inlineSearch input:focus {
+  outline: none;
+  border-color: var(--navy-600);
+  box-shadow: 0 0 0 3px rgba(30, 61, 112, 0.18);
+}
+
+/* ---------- Tablas ---------- */
+th {
+  background: linear-gradient(180deg, #f7f9fc 0%, #e2e7ee 100%);
+  color: var(--navy-800);
+  border-bottom: 1px solid var(--metal-edge);
+  letter-spacing: 0.02em;
+}
+
+tbody tr {
+  transition: background 180ms var(--ease-out);
+}
+
+tbody tr:hover {
+  background: rgba(30, 61, 112, 0.05);
+}
+
+.tableWrap {
+  border-color: #c6d0dd;
+}
+
+/* ---------- Ventanas modales: canto metálico ---------- */
+.profileEditModal,
+.cylinderEditModal,
+.customerEditModal,
+.logoutConfirmModal,
+.detailModal {
+  box-shadow: inset 0 3px 0 var(--metal-mid), 0 28px 60px rgba(8, 22, 48, 0.34);
+}
+
+/* ---------- Guía de filtros (Impresión) ---------- */
+.filterGuide {
+  border-color: #c1cbd9;
+  background: linear-gradient(135deg, #f3f6fa 0%, #ffffff 100%);
+}
+
+.filterGuideOption {
+  transition: border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out), background 200ms var(--ease-out);
+}
+
+.filterGuideOption.active {
+  border-color: var(--navy-600);
+  background: #e9eef6;
+  box-shadow: 0 0 0 3px rgba(30, 61, 112, 0.14);
+}
+
+.filterGuideStatus {
+  background: #e4eaf3;
+  color: var(--navy-800);
+}
+
+/* ---------- Animaciones de entrada de pantallas y bloques ---------- */
+@keyframes uiEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes uiEnterSoft {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.pageIntro {
+  animation: uiEnter 420ms var(--ease-out) backwards;
+}
+
+.workspace > .card,
+.workspace > .metricGrid,
+.workspace > .splitGrid {
+  animation: uiEnter 460ms var(--ease-out) backwards;
+}
+
+.workspace > .card:nth-of-type(2),
+.workspace > .splitGrid:nth-of-type(2) {
+  animation-delay: 70ms;
+}
+
+.workspace > .card:nth-of-type(3) {
+  animation-delay: 140ms;
+}
+
+.metricCard {
+  animation: uiEnter 480ms var(--ease-out) backwards;
+}
+
+.metricCard:nth-child(2) { animation-delay: 60ms; }
+.metricCard:nth-child(3) { animation-delay: 120ms; }
+.metricCard:nth-child(4) { animation-delay: 180ms; }
+
+.loginPanel {
+  animation: uiEnter 520ms var(--ease-out) backwards;
+}
+
+.topbar,
+.sidebar {
+  animation: uiEnterSoft 400ms var(--ease-out) backwards;
+}
+
+.emptyState,
+.notice,
+.filterGuide {
+  animation: uiEnterSoft 360ms var(--ease-out) backwards;
+}
+
+.toast {
+  animation: uiEnter 300ms var(--ease-out) backwards;
+}
+
+/* ---------- Respetar preferencia de reducir movimiento ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* ---------- Esquinas más cuadradas en elementos de la capa ---------- */
+.card h3::after {
+  border-radius: 1px;
+}
+
+/* ---------- Botones con más aire ---------- */
+.rowActions {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.iconBtn {
+  flex: 0 0 auto;
+}
+
+.compactTableGrid {
+  min-width: 952px;
+}
+
+.compactTableRow {
+  grid-template-columns: 118px minmax(260px, 1fr) 165px 120px 125px 164px;
+}
+
+.actionBar,
+.dateFilterActions,
+.modalActions,
+.sessionActions {
+  gap: 12px;
+}
+
+.primaryBtn,
+.secondaryBtn,
+.addLineBtn {
+  padding-left: 22px;
+  padding-right: 22px;
 }

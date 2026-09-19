@@ -60,6 +60,11 @@ public class SalesNoteController {
                 customerName);
     }
 
+    @GetMapping("/recent")
+    public List<SalesNoteResponse> findRecent(@RequestParam(defaultValue = "20") int limit) {
+        return service.findRecent(limit);
+    }
+
     @GetMapping("/next-number")
     public NextSalesNoteNumberResponse nextNumber() {
         return new NextSalesNoteNumberResponse(service.nextNoteNumber());

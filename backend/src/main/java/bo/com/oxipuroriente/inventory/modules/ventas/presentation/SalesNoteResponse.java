@@ -46,7 +46,11 @@ public record SalesNoteResponse(
                 salesNote.getCustomerName(),
                 salesNote.getNoteDate(),
                 salesNote.getObservations(),
-                salesNote.getUtilityAmount(),
+                // Derivada de los cilindros entregados: corrige notas antiguas o importadas guardadas con utilidad 0.
+                delivered.stream()
+                        .map(SalesNoteDeliveredCylinder::getAmount)
+                        .filter(amount -> amount != null)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add),
                 salesNote.getTotalAmount(),
                 salesNote.getStatus(),
                 salesNote.getSourceType(),

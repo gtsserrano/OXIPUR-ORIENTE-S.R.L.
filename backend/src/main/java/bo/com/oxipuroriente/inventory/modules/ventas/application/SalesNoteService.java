@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -119,8 +120,10 @@ public class SalesNoteService {
         salesNote.setCustomerName(customerName);
         salesNote.setNoteDate(request.noteDate());
         salesNote.setObservations(request.observations());
-        salesNote.setUtilityAmount(utilityAmountOrZero(request.utilityAmount()));
-        salesNote.setTotalAmount(totalAmount(delivered));
+        BigDecimal deliveredTotal = totalAmount(delivered);
+        // La utilidad siempre es la suma de los montos de los cilindros entregados; no se toma del request.
+        salesNote.setUtilityAmount(deliveredTotal);
+        salesNote.setTotalAmount(deliveredTotal);
         salesNote.setSourceType(sourceType);
         SalesNote savedNote = salesNoteRepository.save(salesNote);
         Warehouse mainWarehouse = findMainWarehouse();
@@ -264,6 +267,12 @@ public class SalesNoteService {
     }
 
     @Transactional(readOnly = true)
+    public List<SalesNoteResponse> findRecent(int limit) {
+        int boundedLimit = Math.min(Math.max(limit, 1), 100);
+        return loadResponses(salesNoteRepository.findAllByOrderByNoteDateDescIdDesc(PageRequest.of(0, boundedLimit)));
+    }
+
+    @Transactional(readOnly = true)
     public List<SalesNoteResponse> findAll(DatePeriod period) {
         return findAll(period, null, null);
     }
@@ -315,9 +324,6 @@ public class SalesNoteService {
             salesNote.setNoteDate(request.noteDate());
         }
         salesNote.setObservations(request.observations());
-        if (request.utilityAmount() != null) {
-            salesNote.setUtilityAmount(request.utilityAmount());
-        }
         salesNoteRepository.save(salesNote);
         SalesNoteResponse response = findById(id);
         auditLogService.record(AuditAction.UPDATE, "SALES_NOTE", id, previous, response);
@@ -553,10 +559,6 @@ public class SalesNoteService {
 
     private String optionalFilter(String value) {
         return value == null || value.isBlank() ? null : value.trim();
-    }
-
-    private BigDecimal utilityAmountOrZero(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
     }
 
     private String reserveNextNoteNumber() {
